@@ -80,6 +80,7 @@ class Program
         Console.WriteLine("  PARÁMETROS CARGADOS");
         Console.WriteLine("══════════════════════════════════════════════════");
         Console.WriteLine($"  Iteración      : {cfg.IterationPath}");
+        Console.WriteLine($"  Área           : {cfg.AreaPath}");
         Console.WriteLine($"  Título HU      : {cfg.Hu.Title}");
         Console.WriteLine($"  Prioridad      : {cfg.Hu.Priority}");
         Console.WriteLine($"  Riesgo         : {cfg.Hu.Risk}");
@@ -122,7 +123,7 @@ class Program
                 Console.WriteLine("\n[2] Creando Test Cases...");
                 foreach (var tc in cfg.TestCases)
                 {
-                    int tcId = await CreateTestCaseAsync(client, apiVersion, cfg.IterationPath, tc);
+                    int tcId = await CreateTestCaseAsync(client, apiVersion, cfg.IterationPath, cfg.AreaPath, tc);
                     if (tcId > 0)
                     {
                         createdTcs.Add(tcId);
@@ -171,6 +172,7 @@ class Program
     class HuConfig
     {
         public string           IterationPath { get; set; } = "";
+        public string           AreaPath      { get; set; } = "";
         public HuFields         Hu            { get; set; } = new();
         public List<TcFields>   TestCases     { get; set; } = [];
     }
@@ -180,11 +182,11 @@ class Program
         public string Title              { get; set; } = "";
         public string Description        { get; set; } = "";
         public string AcceptanceCriteria { get; set; } = "";
-        public int    Priority           { get; set; } = 2;   // 1=Critical 2=High 3=Medium 4=Low
-        public string Risk               { get; set; } = "2 - Medium";
+        public int    Priority           { get; set; } = 0;
+        public string Risk               { get; set; } = "";
         public string StartDate          { get; set; } = "";
         public string FinishDate         { get; set; } = "";
-        public string ValueArea          { get; set; } = "Business";
+        public string ValueArea          { get; set; } = "";
         public string TipoHU             { get; set; } = "";
         public string FrenteDeTrabajo    { get; set; } = "";
     }
@@ -246,6 +248,8 @@ class Program
             new() { {"op","add"}, {"path","/fields/Custom.FrenteDeTrabajo"},
                     {"value", hu.FrenteDeTrabajo} },
         };
+        if (!string.IsNullOrWhiteSpace(cfg.AreaPath))
+            patch.Add(new() { {"op","add"}, {"path","/fields/System.AreaPath"}, {"value", cfg.AreaPath} });
         var res = await PatchWiAsync(client, url, patch);
         return res.HasValue ? res.Value.GetProperty("id").GetInt32() : -1;
     }
@@ -254,7 +258,7 @@ class Program
     // Si el estado indicado no se puede asignar al crear, crea el TC en estado
     // predeterminado (Design) y luego hace una transición al estado deseado.
     static async Task<int> CreateTestCaseAsync(HttpClient client, string api,
-        string iterationPath, TcFields tc)
+        string iterationPath, string areaPath, TcFields tc)
     {
         var url   = $"https://dev.azure.com/{org}/{project}/_apis/wit/workitems/$Test%20Case?api-version={api}";
         var steps = $"<steps id=\"0\" last=\"1\">" +
@@ -269,6 +273,8 @@ class Program
             new() { {"op","add"}, {"path","/fields/Microsoft.VSTS.TCM.Steps"}, {"value", steps} },
             new() { {"op","add"}, {"path","/fields/System.IterationPath"},      {"value", iterationPath} }
         };
+        if (!string.IsNullOrWhiteSpace(areaPath))
+            basePatch.Add(new() { {"op","add"}, {"path","/fields/System.AreaPath"}, {"value", areaPath} });
 
         // Intento 1: crear directamente con estado (funciona si el proceso lo permite)
         if (!string.IsNullOrWhiteSpace(tc.State))
