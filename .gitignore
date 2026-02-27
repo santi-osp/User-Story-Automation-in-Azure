@@ -1,0 +1,17 @@
+# Secretos — NUNCA subir al repositorio
+.env
+*.env
+*.env.*
+
+# Carpetas generadas por .NET
+bin/
+obj/
+
+# Visual Studio / VS Code
+.vs/
+*.user
+*.suo
+.vscode/
+
+# Logs y temporales
+*.log
