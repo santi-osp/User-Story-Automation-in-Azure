@@ -47,6 +47,10 @@ dotnet run --project Pruebas/Pruebas.csproj -- mi_historia.json
 
 ## Estructura del JSON (`hu.json`)
 
+> **⚠️ Importante:** Los valores de `iterationPath` y `areaPath` que aparecen a continuación son **solo ejemplos**.
+> Debes reemplazarlos con la ruta real de tu iteración y área dentro de tu proyecto en Azure DevOps.
+> Puedes consultarlos en **Boards → Project Settings → Team configuration** o revisando la URL de cualquier work item existente.
+
 ```json
 {
   "iterationPath": "Pruebas\\Soporte SDI\\2026\\Febrero",
