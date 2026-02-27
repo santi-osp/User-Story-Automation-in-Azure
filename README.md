@@ -62,7 +62,8 @@ dotnet run --project Pruebas/Pruebas.csproj -- mi_historia.json
     "finishDate": "2026-02-28",
     "valueArea": "Business",
     "tipoHU": "Funcional",
-    "frenteDeTrabajo": "Mejoras"
+    "frenteDeTrabajo": "Mejoras",
+    "assignedTo": "nombre@postobon.com.co"
   },
 
   "testCases": [
@@ -84,6 +85,7 @@ dotnet run --project Pruebas/Pruebas.csproj -- mi_historia.json
 | `risk` | `1 - High` · `2 - Medium` · `3 - Low` |
 | `valueArea` | `Business` · `Architectural` |
 | `tipoHU` | `Funcional` · `Técnica` |
+| `assignedTo` | Correo del responsable, ej: `juan.perez@empresa.com` · *(vacío = sin asignar)* |
 | `frenteDeTrabajo` | `ControlCambios` · `Mejoras` · `OptimizacionBackEnd` · `OptimizacionFrontEnd` · `Proyecto` · `Seguridad` |
 | `state` (TCs) | `Design` · `Ready` · `Closed` · *(vacío = predeterminado del proceso)* |
 | `acceptanceCriteria` | Texto plano o HTML (`<ul>`, `<li>`, `<b>`, etc.) |
@@ -121,7 +123,8 @@ ESTRUCTURA DEL JSON (no cambies los nombres de los campos):
     "finishDate": "<yyyy-MM-dd>",
     "valueArea": "<Business | Architectural>",
     "tipoHU": "<Funcional | Técnica>",
-    "frenteDeTrabajo": "<ControlCambios | Mejoras | OptimizacionBackEnd | OptimizacionFrontEnd | Proyecto | Seguridad>"
+    "frenteDeTrabajo": "<ControlCambios | Mejoras | OptimizacionBackEnd | OptimizacionFrontEnd | Proyecto | Seguridad>",
+    "assignedTo": "<correo del responsable, ej: juan.perez@empresa.com | dejar vacío para sin asignar>"
   },
 
   "testCases": [

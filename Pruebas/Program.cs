@@ -86,6 +86,7 @@ class Program
         Console.WriteLine($"  Riesgo         : {cfg.Hu.Risk}");
         Console.WriteLine($"  Tipo HU        : {cfg.Hu.TipoHU}");
         Console.WriteLine($"  Frente trabajo : {cfg.Hu.FrenteDeTrabajo}");
+        Console.WriteLine($"  Asignado a     : {(string.IsNullOrWhiteSpace(cfg.Hu.AssignedTo) ? "(sin asignar)" : cfg.Hu.AssignedTo)}");
         Console.WriteLine($"  Fecha inicio   : {cfg.Hu.StartDate}");
         Console.WriteLine($"  Fecha fin      : {cfg.Hu.FinishDate}");
         Console.WriteLine($"  Test Cases     : {cfg.TestCases?.Count ?? 0}");
@@ -189,6 +190,7 @@ class Program
         public string ValueArea          { get; set; } = "";
         public string TipoHU             { get; set; } = "";
         public string FrenteDeTrabajo    { get; set; } = "";
+        public string AssignedTo         { get; set; } = "";
     }
 
     class TcFields
@@ -248,6 +250,8 @@ class Program
             new() { {"op","add"}, {"path","/fields/Custom.FrenteDeTrabajo"},
                     {"value", hu.FrenteDeTrabajo} },
         };
+        if (!string.IsNullOrWhiteSpace(hu.AssignedTo))
+            patch.Add(new() { {"op","add"}, {"path","/fields/System.AssignedTo"}, {"value", hu.AssignedTo} });
         if (!string.IsNullOrWhiteSpace(cfg.AreaPath))
             patch.Add(new() { {"op","add"}, {"path","/fields/System.AreaPath"}, {"value", cfg.AreaPath} });
         var res = await PatchWiAsync(client, url, patch);
