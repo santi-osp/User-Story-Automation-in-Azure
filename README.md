@@ -181,4 +181,4 @@ INSTRUCCIONES ADICIONALES:
 
 ## Autores
 
-Área de Soporte SDI — equipo de Historias de Usuario.
+Área de Soluciones TI
