@@ -18,27 +18,32 @@
     {
       "title": "TC-001 — Login válido",
       "action": "Ingresar usuario y contraseña correctos y hacer clic en Ingresar.",
-      "expected": "El sistema redirige al dashboard y muestra el nombre del usuario."
+      "expected": "El sistema redirige al dashboard y muestra el nombre del usuario.",
+      "state": "Ready"
     },
     {
       "title": "TC-002 — Login inválido",
       "action": "Ingresar credenciales incorrectas y hacer clic en Ingresar.",
-      "expected": "El sistema muestra 'Credenciales inválidas' y no redirige."
+      "expected": "El sistema muestra 'Credenciales inválidas' y no redirige.",
+      "state": "Ready"
     },
     {
       "title": "TC-003 — Campo obligatorio vacío",
       "action": "Dejar el campo contraseña vacío y hacer clic en Ingresar.",
-      "expected": "El sistema muestra 'Campo requerido' junto al campo vacío."
+      "expected": "El sistema muestra 'Campo requerido' junto al campo vacío.",
+      "state": "Ready"
     },
     {
       "title": "TC-004 — Cierre de sesión",
       "action": "Hacer clic en Cerrar sesión desde el menú de usuario.",
-      "expected": "La sesión se cierra y se redirige a la pantalla de login."
+      "expected": "La sesión se cierra y se redirige a la pantalla de login.",
+      "state": "Ready"
     },
     {
       "title": "TC-005 — Responsive en móvil",
       "action": "Abrir la aplicación en un dispositivo de 375px de ancho.",
-      "expected": "El layout se adapta correctamente; sin desbordamiento ni solapamiento."
+      "expected": "El layout se adapta correctamente; sin desbordamiento ni solapamiento.",
+      "state": "Ready"
     }
   ]
 }

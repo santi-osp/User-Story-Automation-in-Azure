@@ -194,6 +194,8 @@ class Program
         public string Title    { get; set; } = "";
         public string Action   { get; set; } = "";
         public string Expected { get; set; } = "";
+        /// <summary>Estado del TC al crearse. Dejar vacío para usar el estado por defecto del proceso.</summary>
+        public string State    { get; set; } = "";
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -249,6 +251,8 @@ class Program
     }
 
     // Crea un Test Case con los pasos leídos del JSON.
+    // Si el estado indicado no se puede asignar al crear, crea el TC en estado
+    // predeterminado (Design) y luego hace una transición al estado deseado.
     static async Task<int> CreateTestCaseAsync(HttpClient client, string api,
         string iterationPath, TcFields tc)
     {
@@ -258,14 +262,47 @@ class Program
                     $"<parameterizedString isformatted=\"true\">{tc.Action}</parameterizedString>" +
                     $"<parameterizedString isformatted=\"true\">{tc.Expected}</parameterizedString>" +
                     $"<description/></step></steps>";
-        var patch = new List<Dictionary<string, object>>
+
+        var basePatch = new List<Dictionary<string, object>>
         {
             new() { {"op","add"}, {"path","/fields/System.Title"},              {"value", tc.Title} },
             new() { {"op","add"}, {"path","/fields/Microsoft.VSTS.TCM.Steps"}, {"value", steps} },
             new() { {"op","add"}, {"path","/fields/System.IterationPath"},      {"value", iterationPath} }
         };
-        var res = await PatchWiAsync(client, url, patch);
-        return res.HasValue ? res.Value.GetProperty("id").GetInt32() : -1;
+
+        // Intento 1: crear directamente con estado (funciona si el proceso lo permite)
+        if (!string.IsNullOrWhiteSpace(tc.State))
+        {
+            var patchConEstado = new List<Dictionary<string, object>>(basePatch)
+            {
+                new() { {"op","add"}, {"path","/fields/System.State"}, {"value", tc.State} }
+            };
+            var res1 = await PatchWiAsync(client, url, patchConEstado, silentError: true);
+            if (res1.HasValue)
+                return res1.Value.GetProperty("id").GetInt32();
+        }
+
+        // Intento 2: crear sin estado (queda en Design) y luego transicionar
+        var res2 = await PatchWiAsync(client, url, basePatch);
+        if (!res2.HasValue) return -1;
+
+        int tcId = res2.Value.GetProperty("id").GetInt32();
+
+        if (!string.IsNullOrWhiteSpace(tc.State))
+        {
+            var patchUrl   = $"https://dev.azure.com/{org}/{project}/_apis/wit/workitems/{tcId}?api-version={api}";
+            var statePatch = new List<Dictionary<string, object>>
+            {
+                new() { {"op","add"}, {"path","/fields/System.State"}, {"value", tc.State} }
+            };
+            var res3 = await PatchWiAsync(client, patchUrl, statePatch, silentError: true);
+            if (res3.HasValue)
+                Console.WriteLine($"      Estado actualizado a '{tc.State}'");
+            else
+                Console.WriteLine($"      AVISO: No se pudo transicionar al estado '{tc.State}'. TC queda en 'Design'.");
+        }
+
+        return tcId;
     }
 
     // Agrega relación "Tested By" desde la HU hacia el Test Case.
@@ -294,7 +331,7 @@ class Program
 
     // PATCH application/json-patch+json (Work Items API).
     static async Task<JsonElement?> PatchWiAsync(HttpClient client, string url,
-        List<Dictionary<string, object>> patch)
+        List<Dictionary<string, object>> patch, bool silentError = false)
     {
         var json = JsonSerializer.Serialize(patch);
         using var content = new StringContent(json, Encoding.UTF8);
@@ -304,7 +341,8 @@ class Program
         var body = await resp.Content.ReadAsStringAsync();
         if (!resp.IsSuccessStatusCode)
         {
-            Console.WriteLine($"    HTTP {resp.StatusCode}: {body}");
+            if (!silentError)
+                Console.WriteLine($"    HTTP {resp.StatusCode}: {body}");
             return null;
         }
         using var doc = JsonDocument.Parse(body);
