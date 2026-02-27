@@ -116,7 +116,9 @@ Los Test Cases creados por el script aparecerán correctamente listados.
 ## Generar el JSON con IA
 
 Puedes pedirle a cualquier IA (ChatGPT, Copilot, etc.) que genere el `hu.json` por ti.  
-Copia el siguiente prompt, rellena la sección **"Lo que necesito"** con tu historia y pégalo en el chat:
+Copia el siguiente prompt, reemplaza la sección **"LO QUE NECESITO"** con tu historia y pégalo en el chat.
+
+> 💡 **Tip:** Cuanto más detalle des en esa sección, mejor será el resultado. Puedes describir el contexto técnico, la lógica de negocio y los casos de prueba que se te ocurran.
 
 ---
 
@@ -159,21 +161,44 @@ ESTRUCTURA DEL JSON (no cambies los nombres de los campos):
 }
 
 ════════════════════════════════════════════
+USA ESTA PLANTILLA PARA REDACTAR TU HU (con emojis):
+════════════════════════════════════════════
+
+🚀 HU (INVEST) — [Título de la historia]
+
+🎯 Rol
+Como [sistema o actor],
+
+📌 Necesito
+[Descripción de la funcionalidad o comportamiento esperado]
+
+🎯 Para que
+[Beneficio o valor que aporta]
+
+✅ Criterios de Aceptación (únicos)
+
+AC1 [emoji] [Nombre del criterio]
+[Descripción clara y medible]
+
+AC2 [emoji] [Nombre del criterio]
+[Descripción clara y medible]
+
+🧪 Test Cases (mínimos)
+
+TC001 — [Descripción corta] ([AC relacionado])
+Acción: [Pasos del usuario]
+Resultado esperado: [Comportamiento del sistema]
+
+════════════════════════════════════════════
 LO QUE NECESITO:
 ════════════════════════════════════════════
 
 [DESCRIBE AQUÍ TU HISTORIA DE USUARIO CON EL MAYOR DETALLE POSIBLE]
 
-Ejemplo:
-"Quiero una HU para agregar validación de campos obligatorios en el formulario de
- creación de clientes. El usuario no debe poder guardar si el nombre o el correo
- están vacíos. Pertenece al frente de Mejoras, es funcional, prioridad alta,
- para la iteración de Marzo 2026."
-
 ════════════════════════════════════════════
 INSTRUCCIONES ADICIONALES:
 ════════════════════════════════════════════
-- Genera entre 3 y 6 Test Cases que cubran flujos positivos, negativos y casos borde.
+- Genera entre 3 y 5 Test Cases que cubran flujos positivos, negativos y casos borde.
 - Los criterios de aceptación deben ser claros, medibles y verificables.
 - Devuelve ÚNICAMENTE el JSON válido, sin texto adicional ni bloques de código markdown.
 ````
