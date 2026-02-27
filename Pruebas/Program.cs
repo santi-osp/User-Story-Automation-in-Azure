@@ -1,6 +1,13 @@
 ﻿// Program.cs
-// Crea una HU en la iteración "Pruebas\Soporte SDI\2026\Febrero"
-// y le vincula varios Test Cases de ejemplo (relación Tested By).
+// Lee un archivo JSON con los parámetros de la HU y los TCs, los crea en
+// Azure DevOps y los vincula (relación Tested By).
+//
+// Uso:
+//   dotnet run                   → busca "hu.json" junto al ejecutable
+//   dotnet run -- mi_historia.json
+//
+// El JSON debe seguir la estructura de "hu.json" incluido en el proyecto.
+
 using System;
 using System.IO;
 using System.Net.Http;
@@ -16,26 +23,9 @@ class Program
     static string project = "";
     static string pat     = "";
 
-    // Iteración destino (debe existir en el proyecto)
-    const string IterationPath = @"Pruebas\Soporte SDI\2026\Febrero";
-
-    // ── Valores del User Story ─────────────────────────────────────────────
-    const string HuTitle              = "HU (auto) – Soporte SDI Febrero 2026";
-    const string HuDescription        = "Historia de usuario generada automáticamente por script.";
-    const string HuAcceptanceCriteria = "<ul><li>El sistema debe responder en menos de 2 segundos.</li><li>El usuario puede completar el flujo sin errores.</li></ul>";
-    //const double HuStoryPoints        = 3;
-    const int    HuPriority           = 2;      // 1=Critical 2=High 3=Medium 4=Low
-    const string HuRisk               = "2 - Medium"; // Low | Medium | High
-    const string HuStartDate          = "2026-02-01";  // yyyy-MM-dd
-    const string HuFinishDate         = "2026-02-28"; // yyyy-MM-dd
-    const string HuValueArea          = "Business";   // Business | Architectural
-    // Campos personalizados del proceso Agile-Necesidades
-    const string HuTipoHU             = "Funcional";  // valor del picklist Tipo HU
-    const string HuFrenteDeTrabajo    = "Mejoras";   // valor del picklist Frente de Trabajo
-
-    static async Task<int> Main()
+    static async Task<int> Main(string[] args)
     {
-        // Cargar .env y luego leer variables
+        // ── PASO 0: Cargar credenciales desde .env ───────────────────────────
         LoadDotEnv();
         org     = Environment.GetEnvironmentVariable("AZDO_ORG")     ?? "";
         project = Environment.GetEnvironmentVariable("AZDO_PROJECT") ?? "";
@@ -48,6 +38,58 @@ class Program
             return 1;
         }
 
+        // ── PASO 1: Leer el JSON de parámetros ───────────────────────────────
+        string jsonFile = args.Length > 0 ? args[0] : FindFile("hu.json");
+        if (string.IsNullOrWhiteSpace(jsonFile) || !File.Exists(jsonFile))
+        {
+            Console.WriteLine($"ERROR: No se encontró el archivo JSON de parámetros: '{jsonFile ?? "hu.json"}'");
+            Console.WriteLine("Uso: dotnet run [-- nombre_archivo.json]");
+            return 1;
+        }
+
+        Console.WriteLine($"Leyendo parámetros desde: {jsonFile}\n");
+        HuConfig cfg;
+        try
+        {
+            var raw = await File.ReadAllTextAsync(jsonFile);
+            cfg = JsonSerializer.Deserialize<HuConfig>(raw, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            })!;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"ERROR leyendo/parseando el JSON: {ex.Message}");
+            return 1;
+        }
+
+        // ── Validación mínima ────────────────────────────────────────────────
+        if (cfg?.Hu is null)
+        {
+            Console.WriteLine("ERROR: El JSON no contiene la sección 'hu'.");
+            return 1;
+        }
+        if (string.IsNullOrWhiteSpace(cfg.Hu.Title))
+        {
+            Console.WriteLine("ERROR: El campo 'hu.title' es obligatorio.");
+            return 1;
+        }
+
+        // ── PASO 2: Mostrar resumen de lo que se va a crear ──────────────────
+        Console.WriteLine("══════════════════════════════════════════════════");
+        Console.WriteLine("  PARÁMETROS CARGADOS");
+        Console.WriteLine("══════════════════════════════════════════════════");
+        Console.WriteLine($"  Iteración      : {cfg.IterationPath}");
+        Console.WriteLine($"  Título HU      : {cfg.Hu.Title}");
+        Console.WriteLine($"  Prioridad      : {cfg.Hu.Priority}");
+        Console.WriteLine($"  Riesgo         : {cfg.Hu.Risk}");
+        Console.WriteLine($"  Tipo HU        : {cfg.Hu.TipoHU}");
+        Console.WriteLine($"  Frente trabajo : {cfg.Hu.FrenteDeTrabajo}");
+        Console.WriteLine($"  Fecha inicio   : {cfg.Hu.StartDate}");
+        Console.WriteLine($"  Fecha fin      : {cfg.Hu.FinishDate}");
+        Console.WriteLine($"  Test Cases     : {cfg.TestCases?.Count ?? 0}");
+        Console.WriteLine("══════════════════════════════════════════════════\n");
+
         const string apiVersion = "7.1";
         using var client = new HttpClient();
         var auth = Convert.ToBase64String(Encoding.ASCII.GetBytes($":{pat}"));
@@ -56,7 +98,7 @@ class Program
 
         try
         {
-            // ── PASO 1: Obtener o crear la HU ────────────────────────────────
+            // ── PASO 3: Crear la HU ──────────────────────────────────────────
             int huId;
             var envHu = Environment.GetEnvironmentVariable("TARGET_HU_ID");
             if (!string.IsNullOrWhiteSpace(envHu) && int.TryParse(envHu, out var parsed))
@@ -67,67 +109,51 @@ class Program
             else
             {
                 Console.WriteLine("[1] Creando User Story...");
-                huId = await CreateUserStoryAsync(client, apiVersion);
+                huId = await CreateUserStoryAsync(client, apiVersion, cfg);
                 if (huId < 0) { Console.WriteLine("ERROR creando HU."); return 1; }
                 Console.WriteLine($"[1] HU creada: ID={huId}");
                 Console.WriteLine($"    {WiUrl(huId)}");
             }
 
-            // ── PASO 2: Crear Test Cases de ejemplo ──────────────────────────
-            Console.WriteLine("\n[2] Creando Test Cases...");
-            var tests = new List<(string title, string action, string expected)>
-            {
-                ("TC-001 — Login válido",
-                 "Ingresar usuario y contraseña correctos y hacer clic en Ingresar.",
-                 "El sistema redirige al dashboard y muestra el nombre del usuario."),
-
-                ("TC-002 — Login inválido",
-                 "Ingresar credenciales incorrectas y hacer clic en Ingresar.",
-                 "El sistema muestra 'Credenciales inválidas' y no redirige."),
-
-                ("TC-003 — Campo obligatorio vacío",
-                 "Dejar el campo contraseña vacío y hacer clic en Ingresar.",
-                 "El sistema muestra 'Campo requerido' junto al campo vacío."),
-
-                ("TC-004 — Cierre de sesión",
-                 "Hacer clic en Cerrar sesión desde el menú de usuario.",
-                 "La sesión se cierra y se redirige a la pantalla de login."),
-
-                ("TC-005 — Responsive en móvil",
-                 "Abrir la aplicación en un dispositivo de 375px de ancho.",
-                 "El layout se adapta correctamente; sin desbordamiento ni solapamiento.")
-            };
-
+            // ── PASO 4: Crear Test Cases ─────────────────────────────────────
             var createdTcs = new List<int>();
-            foreach (var (title, action, expected) in tests)
+            if (cfg.TestCases is { Count: > 0 })
             {
-                int tcId = await CreateTestCaseAsync(client, apiVersion, title, action, expected);
-                if (tcId > 0)
+                Console.WriteLine("\n[2] Creando Test Cases...");
+                foreach (var tc in cfg.TestCases)
                 {
-                    createdTcs.Add(tcId);
-                    Console.WriteLine($"    ID={tcId,-6} \"{title}\"");
+                    int tcId = await CreateTestCaseAsync(client, apiVersion, cfg.IterationPath, tc);
+                    if (tcId > 0)
+                    {
+                        createdTcs.Add(tcId);
+                        Console.WriteLine($"    ID={tcId,-6} \"{tc.Title}\"");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"    ERROR creando: \"{tc.Title}\"");
+                    }
                 }
-                else
+
+                // ── PASO 5: Vincular TCs a la HU (Tested By) ────────────────
+                Console.WriteLine("\n[3] Vinculando Test Cases a la HU (Tested By)...");
+                foreach (var tcId in createdTcs)
                 {
-                    Console.WriteLine($"    ERROR creando: \"{title}\"");
+                    bool ok = await LinkTestedByAsync(client, apiVersion, huId, tcId);
+                    Console.WriteLine(ok
+                        ? $"    HU {huId} <──[Tested By]── TC {tcId}  OK"
+                        : $"    ERROR vinculando TC {tcId}");
                 }
             }
-
-            // ── PASO 3: Vincular TCs a la HU (Tested By) ────────────────────
-            Console.WriteLine("\n[3] Vinculando Test Cases a la HU (Tested By)...");
-            foreach (var tcId in createdTcs)
+            else
             {
-                bool ok = await LinkTestedByAsync(client, apiVersion, huId, tcId);
-                Console.WriteLine(ok
-                    ? $"    HU {huId} <──[Tested By]── TC {tcId}  ✓"
-                    : $"    ERROR vinculando TC {tcId}");
+                Console.WriteLine("\n[2] No hay Test Cases definidos en el JSON, se omite este paso.");
             }
 
             // ── RESUMEN ──────────────────────────────────────────────────────
             Console.WriteLine("\n══════════════════════════════════════════════════");
             Console.WriteLine("  PROCESO FINALIZADO");
             Console.WriteLine("══════════════════════════════════════════════════");
-            Console.WriteLine($"  Iteración : {IterationPath}");
+            Console.WriteLine($"  Iteración : {cfg.IterationPath}");
             Console.WriteLine($"  HU        : {WiUrl(huId)}");
             Console.WriteLine($"  Test Cases: {createdTcs.Count} creados y vinculados");
             Console.WriteLine("══════════════════════════════════════════════════");
@@ -140,64 +166,103 @@ class Program
         }
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
+    // ── Modelos ───────────────────────────────────────────────────────────────
+
+    class HuConfig
+    {
+        public string           IterationPath { get; set; } = "";
+        public HuFields         Hu            { get; set; } = new();
+        public List<TcFields>   TestCases     { get; set; } = [];
+    }
+
+    class HuFields
+    {
+        public string Title              { get; set; } = "";
+        public string Description        { get; set; } = "";
+        public string AcceptanceCriteria { get; set; } = "";
+        public int    Priority           { get; set; } = 2;   // 1=Critical 2=High 3=Medium 4=Low
+        public string Risk               { get; set; } = "2 - Medium";
+        public string StartDate          { get; set; } = "";
+        public string FinishDate         { get; set; } = "";
+        public string ValueArea          { get; set; } = "Business";
+        public string TipoHU             { get; set; } = "";
+        public string FrenteDeTrabajo    { get; set; } = "";
+    }
+
+    class TcFields
+    {
+        public string Title    { get; set; } = "";
+        public string Action   { get; set; } = "";
+        public string Expected { get; set; } = "";
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
 
     static string WiUrl(int id) =>
         $"https://dev.azure.com/{org}/{project}/_workitems/edit/{id}";
 
-    // Crea una User Story con todos los campos del layout del proceso Agile-Necesidades.
-    static async Task<int> CreateUserStoryAsync(HttpClient client, string api)
+    /// <summary>Busca un archivo subiendo desde el directorio del ejecutable.</summary>
+    static string FindFile(string fileName)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var path = Path.Combine(dir.FullName, fileName);
+            if (File.Exists(path)) return path;
+            dir = dir.Parent;
+        }
+        return fileName; // devuelve el nombre tal cual; fallará en la validación de existencia
+    }
+
+    // Crea una User Story con todos los campos leídos del JSON.
+    static async Task<int> CreateUserStoryAsync(HttpClient client, string api, HuConfig cfg)
     {
         var url = $"https://dev.azure.com/{org}/{project}/_apis/wit/workitems/$User%20Story?api-version={api}";
+        var hu  = cfg.Hu;
         var patch = new List<Dictionary<string, object>>
         {
-            // ── Campos estándar ───────────────────────────────────────────────
             new() { {"op","add"}, {"path","/fields/System.Title"},
-                    {"value", HuTitle} },
+                    {"value", hu.Title} },
             new() { {"op","add"}, {"path","/fields/System.Description"},
-                    {"value", HuDescription} },
+                    {"value", hu.Description} },
             new() { {"op","add"}, {"path","/fields/System.IterationPath"},
-                    {"value", IterationPath} },
+                    {"value", cfg.IterationPath} },
             new() { {"op","add"}, {"path","/fields/Microsoft.VSTS.Common.AcceptanceCriteria"},
-                    {"value", HuAcceptanceCriteria} },
-            // new() { {"op","add"}, {"path","/fields/Microsoft.VSTS.Scheduling.StoryPoints"},
-                    //{"value", HuStoryPoints} },
+                    {"value", hu.AcceptanceCriteria} },
             new() { {"op","add"}, {"path","/fields/Microsoft.VSTS.Common.Priority"},
-                    {"value", HuPriority} },
+                    {"value", hu.Priority} },
             new() { {"op","add"}, {"path","/fields/Microsoft.VSTS.Common.Risk"},
-                    {"value", HuRisk} },
+                    {"value", hu.Risk} },
             new() { {"op","add"}, {"path","/fields/Microsoft.VSTS.Scheduling.StartDate"},
-                    {"value", HuStartDate} },
+                    {"value", hu.StartDate} },
             new() { {"op","add"}, {"path","/fields/Microsoft.VSTS.Scheduling.FinishDate"},
-                    {"value", HuFinishDate} },
+                    {"value", hu.FinishDate} },
             new() { {"op","add"}, {"path","/fields/Microsoft.VSTS.Common.ValueArea"},
-                    {"value", HuValueArea} },
-            // ── Campos personalizados (proceso Agile-Necesidades) ─────────────
-            // Ref names: ir a Project Settings > Process > User Story para confirmarlos
+                    {"value", hu.ValueArea} },
             new() { {"op","add"}, {"path","/fields/Custom.TipoHU"},
-                    {"value", HuTipoHU} },
+                    {"value", hu.TipoHU} },
             new() { {"op","add"}, {"path","/fields/Custom.FrenteDeTrabajo"},
-                    {"value", HuFrenteDeTrabajo} },
+                    {"value", hu.FrenteDeTrabajo} },
         };
         var res = await PatchWiAsync(client, url, patch);
         return res.HasValue ? res.Value.GetProperty("id").GetInt32() : -1;
     }
 
-    // Crea un Test Case con pasos estructurados en la misma iteración.
+    // Crea un Test Case con los pasos leídos del JSON.
     static async Task<int> CreateTestCaseAsync(HttpClient client, string api,
-        string title, string action, string expected)
+        string iterationPath, TcFields tc)
     {
-        var url = $"https://dev.azure.com/{org}/{project}/_apis/wit/workitems/$Test%20Case?api-version={api}";
+        var url   = $"https://dev.azure.com/{org}/{project}/_apis/wit/workitems/$Test%20Case?api-version={api}";
         var steps = $"<steps id=\"0\" last=\"1\">" +
                     $"<step id=\"1\" type=\"ActionStep\">" +
-                    $"<parameterizedString isformatted=\"true\">{action}</parameterizedString>" +
-                    $"<parameterizedString isformatted=\"true\">{expected}</parameterizedString>" +
+                    $"<parameterizedString isformatted=\"true\">{tc.Action}</parameterizedString>" +
+                    $"<parameterizedString isformatted=\"true\">{tc.Expected}</parameterizedString>" +
                     $"<description/></step></steps>";
         var patch = new List<Dictionary<string, object>>
         {
-            new() { {"op","add"}, {"path","/fields/System.Title"},              {"value", title} },
+            new() { {"op","add"}, {"path","/fields/System.Title"},              {"value", tc.Title} },
             new() { {"op","add"}, {"path","/fields/Microsoft.VSTS.TCM.Steps"}, {"value", steps} },
-            new() { {"op","add"}, {"path","/fields/System.IterationPath"},      {"value", IterationPath} }
+            new() { {"op","add"}, {"path","/fields/System.IterationPath"},      {"value", iterationPath} }
         };
         var res = await PatchWiAsync(client, url, patch);
         return res.HasValue ? res.Value.GetProperty("id").GetInt32() : -1;
@@ -246,8 +311,7 @@ class Program
         return doc.RootElement.Clone();
     }
 
-    // Lee el archivo .env más cercano (sube desde el exe hasta encontrarlo)
-    // y registra cada KEY=VALUE como variable de entorno del proceso.
+    // Lee el archivo .env más cercano y registra cada KEY=VALUE como variable de entorno.
     static void LoadDotEnv()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

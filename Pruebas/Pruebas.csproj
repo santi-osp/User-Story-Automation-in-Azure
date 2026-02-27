@@ -7,4 +7,11 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <!-- Copia los JSONs de HU al directorio de salida para que el exe los encuentre -->
+  <ItemGroup>
+    <Content Include="*.json" Exclude="*.csproj.nuget.*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>
