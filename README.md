@@ -45,6 +45,22 @@ dotnet run --project Pruebas/Pruebas.csproj -- mi_historia.json
 
 ---
 
+## ⚠️ Paso adicional para visualizar los Test Cases en AzDO
+
+Debido a una limitación de Azure DevOps, los Test Cases creados por el script no aparecen
+visualmente en la pestaña de tests de la HU hasta que se realiza el siguiente procedimiento
+**una sola vez por HU**:
+
+1. Ejecuta el programa — la HU y los Test Cases se crean y vinculan correctamente.
+2. Haz clic en los **tres puntos (⋯)** del HU y selecciona **Add test**.
+5. Escribe cualquier nombre para el test case temporal y dale Enter *(el nombre no importa)*.
+6. Dale clic en los **tres puntos (⋯)** del test case que acabas de crear y selecciona **Remove Test** para borrarlo.
+7. **Recarga la página** (F5).
+
+Los Test Cases creados por el script aparecerán correctamente listados.
+
+---
+
 ## Estructura del JSON (`hu.json`)
 
 > **⚠️ Importante:** Los valores de `iterationPath` y `areaPath` que aparecen a continuación son **solo ejemplos**.
