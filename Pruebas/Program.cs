@@ -1,27 +1,21 @@
-﻿// Program.cs
-// Lee un archivo JSON con los parámetros de la HU y los TCs, los crea en
-// Azure DevOps y los vincula (relación Tested By).
-//
-// Uso:
-//   dotnet run                   → busca "hu.json" junto al ejecutable
-//   dotnet run -- mi_historia.json
-//
-// El JSON debe seguir la estructura de "hu.json" incluido en el proyecto.
-
-using System;
-using System.IO;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
-using System.Collections.Generic;
-using System.Threading.Tasks;
+using System.Net.Http.Headers;
 
+/// <summary>
+/// Herramienta de línea de comandos que lee un archivo JSON con los parámetros de una
+/// Historia de Usuario (HU) y sus Test Cases, los crea en Azure DevOps mediante la REST API
+/// y establece las relaciones Tested By y Requirement Suite.
+/// <para>Uso: <c>dotnet run [-- archivo.json]</c>  (por defecto busca <c>hu.json</c>)</para>
+/// </summary>
 class Program
 {
     static string org     = "";
     static string project = "";
     static string pat     = "";
+
+    /// <summary>Opciones de deserialización JSON reutilizadas en toda la aplicación.</summary>
+    static readonly JsonSerializerOptions JsonOpts = new() { PropertyNameCaseInsensitive = true };
 
     static async Task<int> Main(string[] args)
     {
@@ -52,10 +46,7 @@ class Program
         try
         {
             var raw = await File.ReadAllTextAsync(jsonFile);
-            cfg = JsonSerializer.Deserialize<HuConfig>(raw, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            })!;
+            cfg = JsonSerializer.Deserialize<HuConfig>(raw, JsonOpts)!;
         }
         catch (Exception ex)
         {
@@ -151,6 +142,33 @@ class Program
                 Console.WriteLine("\n[2] No hay Test Cases definidos en el JSON, se omite este paso.");
             }
 
+            // ── PASO 6: Crear Requirement Based Suite ──────────────────────
+            int createdSuiteId = -1;
+            if (cfg.TestSuite is not null)
+            {
+                int planId = cfg.TestSuite.PlanId;
+
+                if (planId == 0 && !string.IsNullOrWhiteSpace(cfg.TestSuite.PlanName))
+                {
+                    Console.WriteLine($"\n[4] Buscando Test Plan \"{cfg.TestSuite.PlanName}\"...");
+                    planId = await ResolveTestPlanIdAsync(client, apiVersion, cfg.TestSuite.PlanName);
+                    if (planId > 0)
+                        Console.WriteLine($"    Plan encontrado: ID={planId}");
+                    else
+                        Console.WriteLine($"    ERROR: No se encontró ningún Test Plan con el nombre \"{cfg.TestSuite.PlanName}\".");
+                }
+
+                if (planId > 0)
+                {
+                    Console.WriteLine($"\n[4] Creando Requirement Based Suite (vinculada a HU {huId})...");
+                    createdSuiteId = await CreateRequirementSuiteAsync(client, apiVersion, planId, huId);
+                    if (createdSuiteId > 0)
+                        Console.WriteLine($"    Suite creada: ID={createdSuiteId}  (los TCs se incluyen automáticamente vía 'Tested By')");
+                    else
+                        Console.WriteLine("    ERROR creando el Requirement Based Suite.");
+                }
+            }
+
             // ── RESUMEN ──────────────────────────────────────────────────────
             Console.WriteLine("\n══════════════════════════════════════════════════");
             Console.WriteLine("  PROCESO FINALIZADO");
@@ -158,6 +176,8 @@ class Program
             Console.WriteLine($"  Iteración : {cfg.IterationPath}");
             Console.WriteLine($"  HU        : {WiUrl(huId)}");
             Console.WriteLine($"  Test Cases: {createdTcs.Count} creados y vinculados");
+            if (createdSuiteId > 0)
+                Console.WriteLine($"  Test Suite: ID={createdSuiteId}");
             Console.WriteLine("══════════════════════════════════════════════════");
             return 0;
         }
@@ -170,14 +190,31 @@ class Program
 
     // ── Modelos ───────────────────────────────────────────────────────────────
 
+    /// <summary>Raíz del archivo JSON de configuración.</summary>
     class HuConfig
     {
+        /// <summary>Ruta de iteración (ej: <c>"Proyecto\\Sprint 1"</c>).</summary>
         public string           IterationPath { get; set; } = "";
+        /// <summary>Ruta del área (ej: <c>"Proyecto\\Equipo"</c>).</summary>
         public string           AreaPath      { get; set; } = "";
+        /// <summary>Campos de la Historia de Usuario.</summary>
         public HuFields         Hu            { get; set; } = new();
+        /// <summary>Test Cases asociados a la HU.</summary>
         public List<TcFields>   TestCases     { get; set; } = [];
+        /// <summary>Configuración del Test Suite. Opcional; si se omite no se crea suite.</summary>
+        public TestSuiteConfig? TestSuite     { get; set; }
     }
 
+    /// <summary>Referencia al Test Plan donde se creará el Requirement Suite.</summary>
+    class TestSuiteConfig
+    {
+        /// <summary>ID directo del Test Plan. Si es 0 se resuelve automáticamente por <see cref="PlanName"/>.</summary>
+        public int    PlanId   { get; set; } = 0;
+        /// <summary>Nombre exacto del Test Plan (alternativa a <see cref="PlanId"/>).</summary>
+        public string PlanName { get; set; } = "";
+    }
+
+    /// <summary>Campos de la Historia de Usuario mapeados al JSON.</summary>
     class HuFields
     {
         public string Title              { get; set; } = "";
@@ -190,24 +227,40 @@ class Program
         public string ValueArea          { get; set; } = "";
         public string TipoHU             { get; set; } = "";
         public string FrenteDeTrabajo    { get; set; } = "";
+        /// <summary>Correo o nombre del usuario. Vacío deja el work item sin asignar.</summary>
         public string AssignedTo         { get; set; } = "";
     }
 
+    /// <summary>Campos de un Test Case mapeados al JSON.</summary>
     class TcFields
     {
         public string Title    { get; set; } = "";
         public string Action   { get; set; } = "";
         public string Expected { get; set; } = "";
-        /// <summary>Estado del TC al crearse. Dejar vacío para usar el estado por defecto del proceso.</summary>
+        /// <summary>
+        /// Estado deseado al crear el TC (ej: <c>"Ready"</c>, <c>"Design"</c>).
+        /// Si está vacío, Azure DevOps asigna el estado por defecto (<c>"Design"</c>).
+        /// </summary>
         public string State    { get; set; } = "";
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    /// <summary>Genera la URL directa al work item en el portal de Azure DevOps.</summary>
     static string WiUrl(int id) =>
         $"https://dev.azure.com/{org}/{project}/_workitems/edit/{id}";
 
-    /// <summary>Busca un archivo subiendo desde el directorio del ejecutable.</summary>
+    /// <summary>
+    /// Construye una operación <c>add</c> para JSON Patch (Work Items API),
+    /// reduciendo la verbosidad de los payloads de creación y edición.
+    /// </summary>
+    static Dictionary<string, object> Op(string path, object value) =>
+        new() { { "op", "add" }, { "path", path }, { "value", value } };
+
+    /// <summary>
+    /// Busca un archivo subiendo directorios desde la ubicación del ejecutable.
+    /// Si no lo encuentra devuelve el nombre tal cual, que fallará en la validación de existencia.
+    /// </summary>
     static string FindFile(string fileName)
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -217,50 +270,46 @@ class Program
             if (File.Exists(path)) return path;
             dir = dir.Parent;
         }
-        return fileName; // devuelve el nombre tal cual; fallará en la validación de existencia
+        return fileName;
     }
 
-    // Crea una User Story con todos los campos leídos del JSON.
+    /// <summary>
+    /// Crea una User Story en Azure DevOps con todos los campos definidos en <paramref name="cfg"/>.
+    /// </summary>
+    /// <returns>ID del work item creado, o -1 si la operación falla.</returns>
     static async Task<int> CreateUserStoryAsync(HttpClient client, string api, HuConfig cfg)
     {
         var url = $"https://dev.azure.com/{org}/{project}/_apis/wit/workitems/$User%20Story?api-version={api}";
         var hu  = cfg.Hu;
         var patch = new List<Dictionary<string, object>>
         {
-            new() { {"op","add"}, {"path","/fields/System.Title"},
-                    {"value", hu.Title} },
-            new() { {"op","add"}, {"path","/fields/System.Description"},
-                    {"value", hu.Description} },
-            new() { {"op","add"}, {"path","/fields/System.IterationPath"},
-                    {"value", cfg.IterationPath} },
-            new() { {"op","add"}, {"path","/fields/Microsoft.VSTS.Common.AcceptanceCriteria"},
-                    {"value", hu.AcceptanceCriteria} },
-            new() { {"op","add"}, {"path","/fields/Microsoft.VSTS.Common.Priority"},
-                    {"value", hu.Priority} },
-            new() { {"op","add"}, {"path","/fields/Microsoft.VSTS.Common.Risk"},
-                    {"value", hu.Risk} },
-            new() { {"op","add"}, {"path","/fields/Microsoft.VSTS.Scheduling.StartDate"},
-                    {"value", hu.StartDate} },
-            new() { {"op","add"}, {"path","/fields/Microsoft.VSTS.Scheduling.FinishDate"},
-                    {"value", hu.FinishDate} },
-            new() { {"op","add"}, {"path","/fields/Microsoft.VSTS.Common.ValueArea"},
-                    {"value", hu.ValueArea} },
-            new() { {"op","add"}, {"path","/fields/Custom.TipoHU"},
-                    {"value", hu.TipoHU} },
-            new() { {"op","add"}, {"path","/fields/Custom.FrenteDeTrabajo"},
-                    {"value", hu.FrenteDeTrabajo} },
+            Op("/fields/System.Title",                             hu.Title),
+            Op("/fields/System.Description",                       hu.Description),
+            Op("/fields/System.IterationPath",                     cfg.IterationPath),
+            Op("/fields/Microsoft.VSTS.Common.AcceptanceCriteria", hu.AcceptanceCriteria),
+            Op("/fields/Microsoft.VSTS.Common.Priority",           hu.Priority),
+            Op("/fields/Microsoft.VSTS.Common.Risk",               hu.Risk),
+            Op("/fields/Microsoft.VSTS.Scheduling.StartDate",      hu.StartDate),
+            Op("/fields/Microsoft.VSTS.Scheduling.FinishDate",     hu.FinishDate),
+            Op("/fields/Microsoft.VSTS.Common.ValueArea",          hu.ValueArea),
+            Op("/fields/Custom.TipoHU",                            hu.TipoHU),
+            Op("/fields/Custom.FrenteDeTrabajo",                   hu.FrenteDeTrabajo),
         };
         if (!string.IsNullOrWhiteSpace(hu.AssignedTo))
-            patch.Add(new() { {"op","add"}, {"path","/fields/System.AssignedTo"}, {"value", hu.AssignedTo} });
+            patch.Add(Op("/fields/System.AssignedTo", hu.AssignedTo));
         if (!string.IsNullOrWhiteSpace(cfg.AreaPath))
-            patch.Add(new() { {"op","add"}, {"path","/fields/System.AreaPath"}, {"value", cfg.AreaPath} });
+            patch.Add(Op("/fields/System.AreaPath", cfg.AreaPath));
+
         var res = await PatchWiAsync(client, url, patch);
         return res.HasValue ? res.Value.GetProperty("id").GetInt32() : -1;
     }
 
-    // Crea un Test Case con los pasos leídos del JSON.
-    // Si el estado indicado no se puede asignar al crear, crea el TC en estado
-    // predeterminado (Design) y luego hace una transición al estado deseado.
+    /// <summary>
+    /// Crea un Test Case en Azure DevOps con título, pasos y resultado esperado.
+    /// Si <see cref="TcFields.State"/> está definido, realiza un segundo PATCH para
+    /// transicionar al estado deseado (Azure DevOps no admite asignar estado en la creación).
+    /// </summary>
+    /// <returns>ID del work item creado, o -1 si la operación falla.</returns>
     static async Task<int> CreateTestCaseAsync(HttpClient client, string api,
         string iterationPath, string areaPath, TcFields tc)
     {
@@ -271,95 +320,166 @@ class Program
                     $"<parameterizedString isformatted=\"true\">{tc.Expected}</parameterizedString>" +
                     $"<description/></step></steps>";
 
-        var basePatch = new List<Dictionary<string, object>>
+        var patch = new List<Dictionary<string, object>>
         {
-            new() { {"op","add"}, {"path","/fields/System.Title"},              {"value", tc.Title} },
-            new() { {"op","add"}, {"path","/fields/Microsoft.VSTS.TCM.Steps"}, {"value", steps} },
-            new() { {"op","add"}, {"path","/fields/System.IterationPath"},      {"value", iterationPath} }
+            Op("/fields/System.Title",             tc.Title),
+            Op("/fields/Microsoft.VSTS.TCM.Steps", steps),
+            Op("/fields/System.IterationPath",     iterationPath),
         };
         if (!string.IsNullOrWhiteSpace(areaPath))
-            basePatch.Add(new() { {"op","add"}, {"path","/fields/System.AreaPath"}, {"value", areaPath} });
+            patch.Add(Op("/fields/System.AreaPath", areaPath));
 
-        // Intento 1: crear directamente con estado (funciona si el proceso lo permite)
-        if (!string.IsNullOrWhiteSpace(tc.State))
-        {
-            var patchConEstado = new List<Dictionary<string, object>>(basePatch)
-            {
-                new() { {"op","add"}, {"path","/fields/System.State"}, {"value", tc.State} }
-            };
-            var res1 = await PatchWiAsync(client, url, patchConEstado, silentError: true);
-            if (res1.HasValue)
-                return res1.Value.GetProperty("id").GetInt32();
-        }
+        var res = await PatchWiAsync(client, url, patch);
+        if (!res.HasValue) return -1;
 
-        // Intento 2: crear sin estado (queda en Design) y luego transicionar
-        var res2 = await PatchWiAsync(client, url, basePatch);
-        if (!res2.HasValue) return -1;
-
-        int tcId = res2.Value.GetProperty("id").GetInt32();
+        int tcId = res.Value.GetProperty("id").GetInt32();
 
         if (!string.IsNullOrWhiteSpace(tc.State))
         {
-            var patchUrl   = $"https://dev.azure.com/{org}/{project}/_apis/wit/workitems/{tcId}?api-version={api}";
-            var statePatch = new List<Dictionary<string, object>>
-            {
-                new() { {"op","add"}, {"path","/fields/System.State"}, {"value", tc.State} }
-            };
-            var res3 = await PatchWiAsync(client, patchUrl, statePatch, silentError: true);
-            if (res3.HasValue)
-                Console.WriteLine($"      Estado actualizado a '{tc.State}'");
-            else
+            var patchUrl = $"https://dev.azure.com/{org}/{project}/_apis/wit/workitems/{tcId}?api-version={api}";
+            var stateRes = await PatchWiAsync(client, patchUrl, [Op("/fields/System.State", tc.State)]);
+            if (!stateRes.HasValue)
                 Console.WriteLine($"      AVISO: No se pudo transicionar al estado '{tc.State}'. TC queda en 'Design'.");
         }
 
         return tcId;
     }
 
-    // Agrega relación "Tested By" desde la HU hacia el Test Case.
+    /// <summary>
+    /// Busca un Test Plan por nombre recorriendo todas las páginas de resultados
+    /// mediante el header <c>x-ms-continuationtoken</c> de la API.
+    /// Si no lo encuentra, imprime la lista completa de planes disponibles para diagnóstico.
+    /// </summary>
+    /// <returns>ID del plan encontrado, o -1 si no existe ninguno con ese nombre.</returns>
+    static async Task<int> ResolveTestPlanIdAsync(HttpClient client, string api, string planName)
+    {
+        string? continuationToken = null;
+        var allPlans = new List<(int Id, string Name)>();
+
+        do
+        {
+            var tokenParam = continuationToken != null ? $"&continuationToken={Uri.EscapeDataString(continuationToken)}" : "";
+            var url = $"https://dev.azure.com/{org}/{project}/_apis/testplan/plans?$top=50{tokenParam}&api-version={api}";
+            using var resp = await client.GetAsync(url);
+            if (!resp.IsSuccessStatusCode)
+            {
+                Console.WriteLine($"    HTTP {resp.StatusCode} al listar planes: {await resp.Content.ReadAsStringAsync()}");
+                return -1;
+            }
+            var body = await resp.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(body);
+
+            foreach (var plan in doc.RootElement.GetProperty("value").EnumerateArray())
+            {
+                var id   = plan.GetProperty("id").GetInt32();
+                var name = plan.GetProperty("name").GetString() ?? "";
+                if (name.Equals(planName, StringComparison.OrdinalIgnoreCase))
+                    return id;
+                allPlans.Add((id, name));
+            }
+
+            resp.Headers.TryGetValues("x-ms-continuationtoken", out var tokens);
+            continuationToken = tokens?.FirstOrDefault();
+
+        } while (continuationToken != null);
+
+        // Plan no encontrado: mostrar los planes disponibles para diagnóstico
+        Console.WriteLine($"    Planes disponibles en el proyecto ({allPlans.Count} encontrados):");
+        foreach (var (id, name) in allPlans)
+            Console.WriteLine($"      ID={id,-6} \"{name}\"");
+        return -1;
+    }
+
+    /// <summary>
+    /// Crea un Requirement Based Suite dentro del Test Plan indicado, vinculado a la HU.
+    /// Azure DevOps incluye automáticamente en el suite todos los Test Cases que tienen
+    /// relación "Tested By" con esa HU.
+    /// </summary>
+    /// <returns>ID del suite creado, o -1 si la operación falla.</returns>
+    static async Task<int> CreateRequirementSuiteAsync(HttpClient client, string api, int planId, int requirementId)
+    {
+        // El suite raíz del plan es el parent obligatorio para crear sub-suites
+        var planUrl  = $"https://dev.azure.com/{org}/{project}/_apis/testplan/plans/{planId}?api-version={api}";
+        using var planResp = await client.GetAsync(planUrl);
+        if (!planResp.IsSuccessStatusCode)
+        {
+            Console.WriteLine($"    HTTP {planResp.StatusCode} al leer el plan {planId}: {await planResp.Content.ReadAsStringAsync()}");
+            return -1;
+        }
+        using var planDoc = JsonDocument.Parse(await planResp.Content.ReadAsStringAsync());
+        int rootSuiteId = planDoc.RootElement.GetProperty("rootSuite").GetProperty("id").GetInt32();
+
+        var url  = $"https://dev.azure.com/{org}/{project}/_apis/testplan/plans/{planId}/suites?api-version={api}";
+        var body = JsonSerializer.Serialize(new
+        {
+            suiteType     = "requirementTestSuite",
+            parentSuite   = new { id = rootSuiteId },
+            requirementId = requirementId
+        });
+        using var content = new StringContent(body, Encoding.UTF8, "application/json");
+        using var resp    = await client.PostAsync(url, content);
+        var respBody = await resp.Content.ReadAsStringAsync();
+        if (!resp.IsSuccessStatusCode)
+        {
+            Console.WriteLine($"    HTTP {resp.StatusCode}: {respBody}");
+            return -1;
+        }
+        using var doc = JsonDocument.Parse(respBody);
+        // La respuesta puede ser un array (un suite por requirementId)
+        var root = doc.RootElement;
+        if (root.ValueKind == JsonValueKind.Array)
+            return root[0].GetProperty("id").GetInt32();
+        return root.GetProperty("id").GetInt32();
+    }
+
+    /// <summary>
+    /// Agrega la relación "Tested By" desde la HU hacia el Test Case.
+    /// Esta relación es la que permite que el Requirement Suite incluya automáticamente el TC.
+    /// </summary>
     static async Task<bool> LinkTestedByAsync(HttpClient client, string api, int huId, int tcId)
     {
         var url   = $"https://dev.azure.com/{org}/{project}/_apis/wit/workitems/{huId}?api-version={api}";
         var tcUrl = $"https://dev.azure.com/{org}/{project}/_apis/wit/workitems/{tcId}";
         var patch = new List<Dictionary<string, object>>
         {
-            new()
+            Op("/relations/-", new Dictionary<string, object>
             {
-                {"op","add"}, {"path","/relations/-"},
-                {"value", new Dictionary<string, object>
-                    {
-                        {"rel",        "Microsoft.VSTS.Common.TestedBy-Forward"},
-                        {"url",        tcUrl},
-                        {"attributes", new Dictionary<string, object>
-                            { {"comment","Vinculado automáticamente"} }}
-                    }
-                }
-            }
+                { "rel",        "Microsoft.VSTS.Common.TestedBy-Forward" },
+                { "url",        tcUrl },
+                { "attributes", new Dictionary<string, object> { { "comment", "Vinculado automáticamente" } } },
+            })
         };
         var res = await PatchWiAsync(client, url, patch);
         return res.HasValue;
     }
 
-    // PATCH application/json-patch+json (Work Items API).
+    /// <summary>
+    /// Envía un PATCH <c>application/json-patch+json</c> a la Work Items API de Azure DevOps.
+    /// </summary>
+    /// <returns>El <see cref="JsonElement"/> raíz de la respuesta, o <c>null</c> si falla.</returns>
     static async Task<JsonElement?> PatchWiAsync(HttpClient client, string url,
-        List<Dictionary<string, object>> patch, bool silentError = false)
+        List<Dictionary<string, object>> patch)
     {
         var json = JsonSerializer.Serialize(patch);
         using var content = new StringContent(json, Encoding.UTF8);
         content.Headers.ContentType = MediaTypeHeaderValue.Parse("application/json-patch+json");
-        using var req  = new HttpRequestMessage(new HttpMethod("PATCH"), url) { Content = content };
+        using var req  = new HttpRequestMessage(HttpMethod.Patch, url) { Content = content };
         using var resp = await client.SendAsync(req);
         var body = await resp.Content.ReadAsStringAsync();
         if (!resp.IsSuccessStatusCode)
         {
-            if (!silentError)
-                Console.WriteLine($"    HTTP {resp.StatusCode}: {body}");
+            Console.WriteLine($"    HTTP {resp.StatusCode}: {body}");
             return null;
         }
         using var doc = JsonDocument.Parse(body);
         return doc.RootElement.Clone();
     }
 
-    // Lee el archivo .env más cercano y registra cada KEY=VALUE como variable de entorno.
+    /// <summary>
+    /// Busca el archivo <c>.env</c> más cercano subiendo desde el directorio del ejecutable
+    /// y registra cada línea <c>KEY=VALUE</c> como variable de entorno del proceso.
+    /// Las variables ya definidas en el entorno del sistema no se sobreescriben.
+    /// </summary>
     static void LoadDotEnv()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
