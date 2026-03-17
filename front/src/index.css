@@ -1,0 +1,117 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=IBM+Plex+Mono:wght@400;600&family=Manrope:wght@400;500;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --ocean-1: #0474c4;
+  --ocean-2: #5379ae;
+  --ocean-3: #2c444c;
+  --ocean-4: #a8c4ec;
+  --ocean-5: #06457f;
+  --ocean-6: #262b40;
+}
+
+body {
+  @apply m-0 font-body text-ink;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.bg-theme {
+  background:
+    radial-gradient(circle at 12% 18%, rgba(168, 196, 236, 0.45), transparent 35%),
+    radial-gradient(circle at 85% 10%, rgba(83, 121, 174, 0.32), transparent 38%),
+    linear-gradient(140deg, #f4f8ff 0%, #e7f0fc 45%, #dbe7fb 100%);
+}
+
+.chip {
+  @apply inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider text-white;
+  background: linear-gradient(130deg, var(--ocean-1), var(--ocean-2));
+}
+
+.panel {
+  @apply rounded-3xl border bg-white p-6 shadow-panel;
+  border-color: rgba(44, 68, 76, 0.18);
+  background-color: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(2px);
+}
+
+.sidebar {
+  @apply flex flex-col gap-6 p-6 text-white md:sticky md:top-0 md:h-screen;
+  background:
+    radial-gradient(circle at 5% 10%, rgba(4, 116, 196, 0.35), transparent 36%),
+    radial-gradient(circle at 90% 25%, rgba(83, 121, 174, 0.3), transparent 38%),
+    linear-gradient(180deg, var(--ocean-6) 0%, var(--ocean-3) 100%);
+  box-shadow: inset -1px 0 0 rgba(168, 196, 236, 0.25);
+}
+
+.content-area {
+  @apply p-5 md:p-8;
+}
+
+.content-wrap {
+  @apply mx-auto w-full max-w-[1120px] space-y-6;
+}
+
+.sidebar-link {
+  @apply block w-full rounded-xl border px-4 py-3 text-left text-sm font-semibold transition;
+  border-color: rgba(168, 196, 236, 0.35);
+  background: rgba(168, 196, 236, 0.08);
+  color: #f4f8ff;
+}
+
+.sidebar-link-active {
+  border-color: #a8c4ec;
+  background: linear-gradient(130deg, var(--ocean-1), var(--ocean-2));
+  color: #ffffff;
+  box-shadow: 0 10px 24px -12px rgba(4, 116, 196, 0.95);
+}
+
+.sidebar-link:hover {
+  background: rgba(168, 196, 236, 0.2);
+  transform: translateY(-1px);
+}
+
+.field-label {
+  @apply flex flex-col gap-1.5 text-sm font-semibold;
+  color: #2c444c;
+}
+
+.field-input {
+  @apply rounded-xl border bg-white px-3.5 py-2.5 font-body text-sm outline-none transition;
+  border-color: rgba(83, 121, 174, 0.35);
+  color: #262b40;
+}
+
+.field-input:focus {
+  border-color: #0474c4;
+  box-shadow: 0 0 0 4px rgba(4, 116, 196, 0.15);
+}
+
+.btn-primary {
+  @apply rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50;
+  background: linear-gradient(130deg, var(--ocean-1), var(--ocean-2));
+  box-shadow: 0 12px 24px -16px rgba(4, 116, 196, 0.95);
+}
+
+.btn-secondary {
+  @apply rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50;
+  background: linear-gradient(130deg, var(--ocean-5), var(--ocean-3));
+}
+
+.btn-muted {
+  @apply rounded-xl border bg-white px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40;
+  border-color: rgba(83, 121, 174, 0.38);
+  color: #06457f;
+}
+
+.output-box {
+  @apply max-h-80 overflow-auto rounded-2xl p-4 font-mono text-xs leading-5;
+  background: linear-gradient(170deg, #262b40, #2c444c);
+  color: #e7f0fc;
+}
