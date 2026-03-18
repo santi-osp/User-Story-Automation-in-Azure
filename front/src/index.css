@@ -59,7 +59,7 @@ body {
 }
 
 .sidebar-link {
-  @apply block w-full rounded-xl border px-4 py-3 text-left text-sm font-semibold transition;
+  @apply block w-full rounded-xl border px-4 py-3 text-center text-sm font-semibold transition;
   border-color: rgba(168, 196, 236, 0.35);
   background: rgba(168, 196, 236, 0.08);
   color: #f4f8ff;
@@ -83,7 +83,7 @@ body {
 }
 
 .field-input {
-  @apply rounded-xl border bg-white px-3.5 py-2.5 font-body text-sm outline-none transition;
+  @apply w-full rounded-xl border bg-white px-3.5 py-2.5 font-body text-sm outline-none transition;
   border-color: rgba(83, 121, 174, 0.35);
   color: #262b40;
 }

@@ -47,162 +47,166 @@ function BuilderModule() {
     return (
         <FormProvider {...methods}>
             <div className="space-y-6">
-                <section className="panel space-y-4">
-                    <h2 className="text-2xl font-display text-ink">Módulo 1: Armar Prompt</h2>
-                    <p className="text-sm text-ink/75">
-                        Solo puedes editar necesidad, cantidad de test cases, estado de test cases, area, iteration path,
-                        assigned to, fechas, valueArea, tipoHU, frenteDeTrabajo, risk, priority y testSuite.
-                    </p>
-                    {message && <p className="rounded-xl bg-white/80 px-3 py-2 text-sm">{message}</p>}
-                </section>
-
-                <form className="space-y-5" onSubmit={onGenerate}>
-                    <section className="panel space-y-4">
-                        <label className="field-label">
-                            Necesidad
-                            <textarea
-                                rows={4}
-                                className="field-input"
-                                {...methods.register("need")}
-                                placeholder="Describe la necesidad que reemplaza la sección Necesito"
-                            />
-                        </label>
-
-                        <div className="grid gap-4 md:grid-cols-3">
-                            <label className="field-label">
-                                Cantidad de Test Cases
-                                <input
-                                    type="number"
-                                    min={1}
-                                    max={50}
-                                    className="field-input"
-                                    {...methods.register("tcCount", { valueAsNumber: true, min: 1, max: 50 })}
-                                />
-                            </label>
-
-                            <label className="field-label">
-                                Estado de Test Cases
-                                <select className="field-input" {...methods.register("tcState")}>
-                                    <option value="Ready">Ready</option>
-                                    <option value="Closed">Closed</option>
-                                    <option value="Desing">Desing</option>
-                                </select>
-                            </label>
-
-                            <label className="field-label">
-                                hu.priority
-                                <input
-                                    type="number"
-                                    min={1}
-                                    max={4}
-                                    className="field-input"
-                                    {...methods.register("hu.priority", {
-                                        valueAsNumber: true,
-                                        required: true,
-                                        min: 1,
-                                        max: 4
-                                    })}
-                                />
-                            </label>
-                        </div>
-
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <label className="field-label">
-                                iterationPath
-                                <input className="field-input" {...methods.register("iterationPath", { required: true })} />
-                            </label>
-                            <label className="field-label">
-                                areaPath
-                                <input className="field-input" {...methods.register("areaPath", { required: true })} />
-                            </label>
-
-                            <label className="field-label">
-                                hu.assignedTo
-                                <input className="field-input" {...methods.register("hu.assignedTo")} />
-                            </label>
-                            <label className="field-label">
-                                hu.risk
-                                <select className="field-input" {...methods.register("hu.risk")}>
-                                    <option value="Baja">Baja</option>
-                                    <option value="Media">Media</option>
-                                    <option value="Alta">Alta</option>
-                                </select>
-                            </label>
-
-                            <label className="field-label">
-                                hu.startDate
-                                <input type="date" className="field-input" {...methods.register("hu.startDate")} />
-                            </label>
-                            <label className="field-label">
-                                hu.finishDate
-                                <input type="date" className="field-input" {...methods.register("hu.finishDate")} />
-                            </label>
-
-                            <label className="field-label">
-                                hu.valueArea
-                                <input className="field-input" {...methods.register("hu.valueArea")} />
-                            </label>
-                            <label className="field-label">
-                                hu.tipoHU
-                                <input className="field-input" {...methods.register("hu.tipoHU")} />
-                            </label>
-
-                            <label className="field-label md:col-span-2">
-                                hu.frenteDeTrabajo
-                                <input className="field-input" {...methods.register("hu.frenteDeTrabajo")} />
-                            </label>
-                        </div>
-
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <label className="field-label">
-                                testSuite.planId
-                                <input
-                                    type="number"
-                                    className="field-input"
-                                    {...methods.register("testSuite.planId", { valueAsNumber: true })}
-                                />
-                            </label>
-                            <label className="field-label">
-                                testSuite.planName
-                                <input className="field-input" {...methods.register("testSuite.planName")} />
-                            </label>
-                        </div>
-                    </section>
-
-                    <div className="flex flex-wrap gap-2">
-                        <button type="submit" className="btn-primary">
-                            Generar prompt
-                        </button>
-                        <button type="button" className="btn-secondary" onClick={resetTemplate}>
-                            Reset
-                        </button>
-                        <button type="button" className="btn-muted" onClick={() => void copyPrompt()} disabled={!prompt}>
-                            Copiar prompt
-                        </button>
-                        <button type="button" className="btn-muted" onClick={() => void copyJson()} disabled={!jsonOut}>
-                            Copiar JSON
-                        </button>
-                        <button
-                            type="button"
-                            className="btn-muted"
-                            onClick={() => jsonOut && downloadJson("hu.generated.json", jsonOut)}
-                            disabled={!jsonOut}
-                        >
-                            Descargar JSON
-                        </button>
+                <section className="-mx-5 -mt-5 bg-white px-5 py-6 md:-mx-8 md:-mt-8 md:px-8">
+                    <div className="mx-auto w-full max-w-[1120px] space-y-4">
+                        <h2 className="text-4xl font-display text-ink">Armar Prompt</h2>
+                        <p className="text-sm text-ink/75">
+                            Solo puedes editar necesidad, cantidad de test cases, estado de test cases, area, iteration path,
+                            assigned to, fechas, valueArea, tipoHU, frenteDeTrabajo, risk, priority y testSuite.
+                        </p>
                     </div>
-                </form>
-
-                <section className="panel grid gap-4 lg:grid-cols-2">
-                    <article>
-                        <h3 className="mb-2 font-semibold text-ink">Prompt final</h3>
-                        <pre className="output-box">{prompt || "Aún no generado"}</pre>
-                    </article>
-                    <article>
-                        <h3 className="mb-2 font-semibold text-ink">JSON final</h3>
-                        <pre className="output-box">{jsonOut ? JSON.stringify(jsonOut, null, 2) : "Aún no generado"}</pre>
-                    </article>
                 </section>
+
+                <div className="content-wrap">
+                    <form className="space-y-5" onSubmit={onGenerate}>
+                        <section className="panel space-y-4">
+                            <label className="field-label">
+                                Necesidad
+                                <textarea
+                                    rows={4}
+                                    className="field-input"
+                                    {...methods.register("need")}
+                                    placeholder="Describe la necesidad que reemplaza la sección Necesito"
+                                />
+                            </label>
+
+                            <div className="grid gap-4 md:grid-cols-3">
+                                <label className="field-label">
+                                    Cantidad de Test Cases
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={50}
+                                        className="field-input"
+                                        {...methods.register("tcCount", { valueAsNumber: true, min: 1, max: 50 })}
+                                    />
+                                </label>
+
+                                <label className="field-label">
+                                    Estado de Test Cases
+                                    <select className="field-input" {...methods.register("tcState")}>
+                                        <option value="Ready">Ready</option>
+                                        <option value="Closed">Closed</option>
+                                        <option value="Desing">Desing</option>
+                                    </select>
+                                </label>
+
+                                <label className="field-label">
+                                    hu.priority
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={4}
+                                        className="field-input"
+                                        {...methods.register("hu.priority", {
+                                            valueAsNumber: true,
+                                            required: true,
+                                            min: 1,
+                                            max: 4
+                                        })}
+                                    />
+                                </label>
+                            </div>
+
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <label className="field-label">
+                                    iterationPath
+                                    <input className="field-input" {...methods.register("iterationPath", { required: true })} />
+                                </label>
+                                <label className="field-label">
+                                    areaPath
+                                    <input className="field-input" {...methods.register("areaPath", { required: true })} />
+                                </label>
+
+                                <label className="field-label">
+                                    hu.assignedTo
+                                    <input className="field-input" {...methods.register("hu.assignedTo")} />
+                                </label>
+                                <label className="field-label">
+                                    hu.risk
+                                    <select className="field-input" {...methods.register("hu.risk")}>
+                                        <option value="Baja">Baja</option>
+                                        <option value="Media">Media</option>
+                                        <option value="Alta">Alta</option>
+                                    </select>
+                                </label>
+
+                                <label className="field-label">
+                                    hu.startDate
+                                    <input type="date" className="field-input" {...methods.register("hu.startDate")} />
+                                </label>
+                                <label className="field-label">
+                                    hu.finishDate
+                                    <input type="date" className="field-input" {...methods.register("hu.finishDate")} />
+                                </label>
+
+                                <label className="field-label">
+                                    hu.valueArea
+                                    <input className="field-input" {...methods.register("hu.valueArea")} />
+                                </label>
+                                <label className="field-label">
+                                    hu.tipoHU
+                                    <input className="field-input" {...methods.register("hu.tipoHU")} />
+                                </label>
+
+                                <label className="field-label md:col-span-2">
+                                    hu.frenteDeTrabajo
+                                    <input className="field-input" {...methods.register("hu.frenteDeTrabajo")} />
+                                </label>
+                            </div>
+
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <label className="field-label">
+                                    testSuite.planId
+                                    <input
+                                        type="number"
+                                        className="field-input"
+                                        {...methods.register("testSuite.planId", { valueAsNumber: true })}
+                                    />
+                                </label>
+                                <label className="field-label">
+                                    testSuite.planName
+                                    <input className="field-input" {...methods.register("testSuite.planName")} />
+                                </label>
+                            </div>
+                        </section>
+
+                        <div className="flex flex-wrap gap-2">
+                            <button type="submit" className="btn-primary">
+                                Generar prompt
+                            </button>
+                            <button type="button" className="btn-secondary" onClick={resetTemplate}>
+                                Reset
+                            </button>
+                            <button type="button" className="btn-muted" onClick={() => void copyPrompt()} disabled={!prompt}>
+                                Copiar prompt
+                            </button>
+                            <button type="button" className="btn-muted" onClick={() => void copyJson()} disabled={!jsonOut}>
+                                Copiar JSON
+                            </button>
+                            <button
+                                type="button"
+                                className="btn-muted"
+                                onClick={() => jsonOut && downloadJson("hu.generated.json", jsonOut)}
+                                disabled={!jsonOut}
+                            >
+                                Descargar JSON
+                            </button>
+                        </div>
+                        {message && <p className="rounded-xl bg-white/80 px-5 py-2 text-2m text-green-500">{message}</p>}
+                    </form>
+
+                    <section className="panel grid gap-4 lg:grid-cols-2">
+                        <article>
+                            <h3 className="mb-2 font-semibold text-ink">Prompt final</h3>
+                            <pre className="output-box">{prompt || "Aún no generado"}</pre>
+                        </article>
+                        <article>
+                            <h3 className="mb-2 font-semibold text-ink">JSON final</h3>
+                            <pre className="output-box">{jsonOut ? JSON.stringify(jsonOut, null, 2) : "Aún no generado"}</pre>
+                        </article>
+                    </section>
+                </div>
             </div>
         </FormProvider>
     );
@@ -230,7 +234,7 @@ function JsonPreviewModule() {
     return (
         <div className="space-y-6">
             <section className="panel space-y-4">
-                <h2 className="text-2xl font-display text-ink">Módulo 2: Preview desde JSON</h2>
+                <h2 className="text-2xl font-display text-ink">Preview desde JSON</h2>
                 <p className="text-sm text-ink/75">
                     Pega un JSON de HU para ver previsualización de HU y Test Cases.
                 </p>
@@ -320,9 +324,9 @@ export default function App() {
             <div className="grid min-h-screen grid-cols-1 md:grid-cols-[290px_1fr]">
                 <aside className="sidebar">
                     <div className="space-y-3">
-                        <p className="chip">HU Workbench</p>
-                        <h1 className="text-2xl font-display">Generador SDI</h1>
-                        <p className="text-sm text-white/85">Selecciona un módulo para trabajar. Los accesos rápidos están arriba para reducir clics.</p>
+                        <p className="chip">User Story Automation</p>
+                        <h1 className="text-3xl font-display">Generador HU</h1>
+                        <p className="text-sm text-white/85">Selecciona un módulo para trabajar.</p>
                     </div>
 
                     <nav className="space-y-2">
@@ -331,24 +335,30 @@ export default function App() {
                             className={`sidebar-link ${module === "builder" ? "sidebar-link-active" : ""}`}
                             onClick={() => setModule("builder")}
                         >
-                            1. Armar Prompt
+                            Armar Prompt
                         </button>
                         <button
                             type="button"
                             className={`sidebar-link ${module === "json-preview" ? "sidebar-link-active" : ""}`}
                             onClick={() => setModule("json-preview")}
                         >
-                            2. Preview JSON
+                            Preview JSON
                         </button>
                     </nav>
 
-                    <div className="mt-auto rounded-2xl border border-white/20 bg-white/10 p-3 text-xs text-white/85">
+                    <div className="mt-auto rounded-2xl border border-white/20 bg-white/10 p-3 text-sm text-white/85">
                         Consejo: en Armar Prompt completa primero necesidad y cantidad de TCs para obtener resultados más rápidos.
                     </div>
                 </aside>
 
                 <main className="content-area">
-                    <div className="content-wrap">{module === "builder" ? <BuilderModule /> : <JsonPreviewModule />}</div>
+                    {module === "builder" ? (
+                        <BuilderModule />
+                    ) : (
+                        <div className="content-wrap">
+                            <JsonPreviewModule />
+                        </div>
+                    )}
                 </main>
             </div>
         </div>

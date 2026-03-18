@@ -2,6 +2,11 @@
 
 Herramienta de línea de comandos en C# (.NET 9) que lee un archivo JSON con los parámetros de una Historia de Usuario y la crea automáticamente en Azure DevOps, junto con sus Test Cases vinculados (relación *Tested By*) y su Requirement Based Suite en el Test Plan indicado.
 
+Este repositorio incluye además un **frontend (HU Workbench)** en React para ayudarte a:
+
+- generar el prompt + JSON final desde campos controlados,
+- pegar un JSON y ver una previsualización (HU + Test Cases).
+
 ---
 
 ## ¿Cómo funciona?
@@ -51,6 +56,64 @@ dotnet run --project Pruebas/Pruebas.csproj
 # Usa otro archivo JSON
 dotnet run --project Pruebas/Pruebas.csproj -- mi_historia.json
 ```
+
+---
+
+## Frontend (HU Workbench)
+
+Aplicación en React + Vite + TypeScript (carpeta `front/`). Es **opcional** y no llama a Azure DevOps: se enfoca en ayudarte a armar/validar el JSON y el prompt.
+
+### Requisitos previos
+
+- Node.js (recomendado: 18+)
+- npm
+
+### Ejecutar localmente
+
+```bash
+cd front
+npm install
+npm run dev
+```
+
+Vite te mostrará la URL local (típicamente `http://localhost:5173`).
+
+### Comandos útiles
+
+```bash
+cd front
+
+# tests
+npm test
+
+# build producción
+npm run build
+
+# preview del build
+npm run preview
+
+# lint
+npm run lint
+```
+
+### Uso (módulos)
+
+La UI tiene una **sidebar** para alternar módulos.
+
+**Módulo 1: Armar Prompt**
+
+- Completa/edita los campos permitidos (por ejemplo: necesidad, cantidad/estado de test cases, `iterationPath`, `areaPath`, `hu.*`, `testSuite.*`).
+- Acciones:
+  - Generar prompt
+  - Reset
+  - Copiar prompt / Copiar JSON
+  - Descargar JSON (`hu.generated.json`)
+
+**Módulo 2: Preview JSON**
+
+- Pega un JSON que incluya al menos `hu` y `testCases`.
+- La pantalla renderiza una previsualización de HU y la lista de Test Cases.
+- Los campos HTML `description` y `acceptanceCriteria` se sanitizan antes de renderizarse.
 
 ---
 
@@ -287,6 +350,10 @@ Los test cases deben cubrir:
     Program.cs          # Lógica principal
     Pruebas.csproj      # Proyecto .NET
     hu.json             # Tu archivo de parámetros (NO se sube al repo)
+ front/                 # Frontend React (HU Workbench)
+   src/App.tsx         # Layout + módulos
+   src/lib/template.ts # Plantilla base
+   src/utils/download.ts # Copiar/descargar
  .env                    # Credenciales (NO se sube al repo)
  .gitignore
  README.md
