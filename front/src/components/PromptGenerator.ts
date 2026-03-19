@@ -35,17 +35,10 @@ function applyNeedToDescription(currentDescription: string, need: string): strin
   return `${currentDescription}${block}`;
 }
 
-function normalizeState(state: FormValues["tcState"]): "Ready" | "Design" | "Closed" {
-  if (state === "Desing") {
-    return "Design";
-  }
-  return state;
-}
-
 function buildTestCases(values: FormValues): HuPayload["testCases"] {
   const count = Math.max(1, Math.min(50, Number(values.tcCount) || 1));
   const templateCases = TEMPLATE_PAYLOAD.testCases;
-  const forcedState = normalizeState(values.tcState);
+  const forcedState = values.tcState;
 
   const generated: HuPayload["testCases"] = [];
 

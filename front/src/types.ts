@@ -1,5 +1,5 @@
-export type RiskLevel = "Baja" | "Media" | "Alta";
-export type TcState = "Ready" | "Design" | "Desing" | "Closed";
+export type RiskLevel = "1 - High" | "2 - Medium" | "3 - Low";
+export type TcState = "Ready" | "Design" | "Closed";
 
 export interface HuFields {
   title: string;

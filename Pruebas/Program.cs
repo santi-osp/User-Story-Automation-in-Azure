@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Net.Http.Headers;
 
 // ── Cargar .env ──────────────────────────────────────────────────────────────
@@ -9,8 +10,6 @@ var org = Environment.GetEnvironmentVariable("AZDO_ORG") ?? "";
 var project = Environment.GetEnvironmentVariable("AZDO_PROJECT") ?? "";
 var pat = Environment.GetEnvironmentVariable("AZDO_PAT") ?? "";
 var openAiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "";
-
-var jsonOpts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
 // ── Configurar app ───────────────────────────────────────────────────────────
 var builder = WebApplication.CreateBuilder(args);
@@ -58,7 +57,7 @@ app.MapPost("/api/generate", async (GenerateRequest req) =>
 
     try
     {
-        var parsed = JsonSerializer.Deserialize<HuConfig>(jsonStr, jsonOpts);
+        var parsed = JsonSerializer.Deserialize<HuConfig>(jsonStr, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         if (parsed?.Hu is null)
             return Results.BadRequest(new { error = "El JSON generado no contiene la sección 'hu'.", raw = outputText });
         return Results.Ok(new { json = jsonStr, raw = outputText });
@@ -214,9 +213,9 @@ static class AiHelpers
     public static string ExtractJsonFromText(string rawText)
     {
         // Intentar extraer de bloque de código fenced
-        var match = System.Text.RegularExpressions.Regex.Match(rawText, @"```json\s*([\s\S]*?)\s*```", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var match = Regex.Match(rawText, @"```json\s*([\s\S]*?)\s*```", RegexOptions.IgnoreCase);
         if (!match.Success)
-            match = System.Text.RegularExpressions.Regex.Match(rawText, @"```\s*([\s\S]*?)\s*```");
+            match = Regex.Match(rawText, @"```\s*([\s\S]*?)\s*```");
         if (match.Success)
             return match.Groups[1].Value.Trim();
 
@@ -386,7 +385,7 @@ class AzDoService
     {
         var json = JsonSerializer.Serialize(patch);
         using var content = new StringContent(json, Encoding.UTF8);
-        content.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse("application/json-patch+json");
+        content.Headers.ContentType = MediaTypeHeaderValue.Parse("application/json-patch+json");
         using var req = new HttpRequestMessage(HttpMethod.Patch, url) { Content = content };
         using var resp = await _client.SendAsync(req);
         var body = await resp.Content.ReadAsStringAsync();

@@ -222,7 +222,7 @@ function BuilderModule({ onPromptReady, onOpenAiModule, onLog }: BuilderModulePr
                                     <select className="field-input" {...methods.register("tcState")}>
                                         <option value="Ready">Ready</option>
                                         <option value="Closed">Closed</option>
-                                        <option value="Desing">Desing</option>
+                                        <option value="Design">Design</option>
                                     </select>
                                 </label>
 
@@ -278,7 +278,7 @@ function BuilderModule({ onPromptReady, onOpenAiModule, onLog }: BuilderModulePr
                                 <label className="field-label">
                                     hu.valueArea
                                     <select className="field-input" {...methods.register("hu.valueArea")}>
-                                        <option value="Business">Business </option>
+                                        <option value="Business">Business</option>
                                         <option value="Architectural">Architectural</option>
                                     </select>
                                 </label>
@@ -408,7 +408,7 @@ function JsonPreviewModule({ initialPrompt, onGoBack, onLog }: JsonPreviewModule
         if (initialPrompt.trim() && initialPrompt !== promptInput) {
             setPromptInput(initialPrompt);
         }
-    }, [initialPrompt, promptInput]);
+    }, [initialPrompt]);
 
     useEffect(() => {
         const toStore: PreviewPersistedState = {

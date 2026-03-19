@@ -10,7 +10,7 @@ describe("PromptGenerator", () => {
     values.testSuite.planId = 777;
     values.testSuite.planName = "Plan Q2";
     values.tcCount = 3;
-    values.tcState = "Desing";
+    values.tcState = "Design";
     values.need = "Necesito depurar cargas con trazabilidad";
 
     const result = generatePromptAndJson(values);
