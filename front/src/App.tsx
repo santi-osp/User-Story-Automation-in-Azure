@@ -125,9 +125,9 @@ function BuilderModule() {
                                 <label className="field-label">
                                     hu.risk
                                     <select className="field-input" {...methods.register("hu.risk")}>
-                                        <option value="Baja">Baja</option>
-                                        <option value="Media">Media</option>
-                                        <option value="Alta">Alta</option>
+                                        <option value="1 - High">1 - High</option>
+                                        <option value="2 - Medium">2 - Medium</option>
+                                        <option value="3 - Low">3 - Low</option>
                                     </select>
                                 </label>
 
@@ -142,16 +142,29 @@ function BuilderModule() {
 
                                 <label className="field-label">
                                     hu.valueArea
-                                    <input className="field-input" {...methods.register("hu.valueArea")} />
+                                    <select className="field-input" {...methods.register("hu.valueArea")}>
+                                        <option value="Business">Business </option>
+                                        <option value="Architectural">Architectural</option>
+                                    </select>
                                 </label>
                                 <label className="field-label">
                                     hu.tipoHU
-                                    <input className="field-input" {...methods.register("hu.tipoHU")} />
+                                    <select className="field-input" {...methods.register("hu.tipoHU")}>
+                                        <option value="Funcional">Funcional</option>
+                                        <option value="Técnica">Técnica</option>
+                                    </select>
                                 </label>
 
                                 <label className="field-label md:col-span-2">
                                     hu.frenteDeTrabajo
-                                    <input className="field-input" {...methods.register("hu.frenteDeTrabajo")} />
+                                    <select className="field-input" {...methods.register("hu.frenteDeTrabajo")}>
+                                        <option value="ControlCambios">ControlCambios</option>
+                                        <option value="Mejoras">Mejoras</option>
+                                        <option value="OptimizacionBackEnd">OptimizacionBackEnd</option>
+                                        <option value="OptimizacionFrontEnd">OptimizacionFrontEnd</option>
+                                        <option value="Proyecto">Proyecto </option>
+                                        <option value="Seguridad">Seguridad</option>
+                                    </select>
                                 </label>
                             </div>
 
