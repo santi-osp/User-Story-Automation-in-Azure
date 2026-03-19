@@ -1,4 +1,3 @@
-import { V } from "vitest/dist/chunks/reporters.nr4dxCkA.js";
 import type { FormValues, HuPayload, TcFields } from "../types";
 
 export const EXACT_PROMPT_TEMPLATE = String.raw`{
@@ -6,7 +5,7 @@ export const EXACT_PROMPT_TEMPLATE = String.raw`{
   "areaPath": "Sistema digital de integración (SDI)\\Soporte SDI",
   "hu": {
     "title": "🚀 HU — Migración: dejar solo SAP en USP_CargarSaldoEnvase (eliminar AS400 y asegurar auditoría)",
-    "description": "<p><strong>Rol:</strong> Como Sistema SDI / equipo de integración de datos,</p><p><strong>Necesito:</strong> Refactorizar el stored procedure [SDI].[USP_CargarSaldoEnvase] para que solo procese SAP y garantice registro de auditoría y manejo de errores.</p><p><strong>Para que:</strong> La carga del canónico TBL_SaldoEnvase sea consistente con la nueva arquitectura (solo SAP), elimine código muerto/condicional de AS400.</p>",
+    "description": "<p><strong>Rol:</strong> Como (rol que necesita la HU),</p><p><strong>Necesito:</strong> Refactorizar el stored procedure [SDI].[USP_CargarSaldoEnvase] para que solo procese SAP y garantice registro de auditoría y manejo de errores.</p><p><strong>Para que:</strong> La carga del canónico TBL_SaldoEnvase sea consistente con la nueva arquitectura (solo SAP), elimine código muerto/condicional de AS400.</p>",
     "acceptanceCriteria": "<ul><li><strong>AC1 🔁 Eliminar dependencias AS400</strong><br>No debe quedar ninguna referencia ejecutable a AS400: tablas staging (Staging.TBL_TMP_AS400SaldoEnvase), variables específicas (@rowsConsultedAS400, @rowsErrorAS400), deletes/merges o mapeos por SPlantaAS400Id. El procedimiento compila y no toca datos AS400 en ningún flujo.</li><li><strong>AC2 ✅ Procesamiento SAP activo e ininterrumpido</strong><br>Cuando se invoque el SP con @Erp = 'SAP' (o con @Erp = NULL), se debe ejecutar el MERGE/flujo SAP normalmente (sin insertar mensaje de error ni hacer GOTO que impida la carga). Los registros SAP válidos (BInconsistente = 0) deben insertarse/actualizarse según la lógica actual.</li><li><strong>AC3 🔒 Comprobación funcionalidad</strong><br>Cuando se ejecuta con NULL, el SP debe: truncar el canónico (si ese es el comportamiento esperado), cargar SAP y registrar la bitácora final con conteos correctos.</li></ul>",
     "priority": 1,
     "risk": "",

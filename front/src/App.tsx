@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FormProvider, useForm } from "react-hook-form";
 import DOMPurify from "dompurify";
 import { payloadToFormValues, TEMPLATE_PAYLOAD } from "./lib/template";
@@ -7,8 +7,64 @@ import type { FormValues, HuPayload } from "./types";
 import { copyToClipboard, downloadJson } from "./utils/download";
 
 type ModuleKey = "builder" | "json-preview";
+const BUILDER_STORAGE_KEY = "hu.builder.state.v1";
+const PREVIEW_STORAGE_KEY = "hu.preview.state.v1";
 
-function BuilderModule() {
+interface BuilderPersistedState {
+    formValues: FormValues;
+    prompt: string;
+    jsonOut: HuPayload | null;
+    message: string;
+}
+
+interface CreatedTc {
+    id: number;
+    title: string;
+    url: string;
+}
+
+interface CreateResult {
+    huId: number;
+    huUrl: string;
+    testCases: CreatedTc[];
+    suiteId: number;
+    message: string;
+}
+
+interface PreviewPersistedState {
+    promptInput: string;
+    rawJson: string;
+    parsed: HuPayload | null;
+    rawResponse: string;
+    status: string;
+    error: string;
+    createResult: CreateResult | null;
+}
+
+function loadLocalState<T>(key: string): T | null {
+    try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        return JSON.parse(raw) as T;
+    } catch {
+        return null;
+    }
+}
+
+function parseHuPayload(value: string): HuPayload {
+    const parsed = JSON.parse(value) as HuPayload;
+    if (!parsed.hu || !parsed.testCases || !Array.isArray(parsed.testCases)) {
+        throw new Error("El JSON debe contener 'hu' y 'testCases'.");
+    }
+    return parsed;
+}
+
+interface BuilderModuleProps {
+    onPromptReady: (prompt: string) => void;
+    onOpenAiModule: () => void;
+}
+
+function BuilderModule({ onPromptReady, onOpenAiModule }: BuilderModuleProps) {
     const methods = useForm<FormValues>({
         mode: "onBlur",
         defaultValues: payloadToFormValues(TEMPLATE_PAYLOAD)
@@ -18,10 +74,49 @@ function BuilderModule() {
     const [jsonOut, setJsonOut] = useState<HuPayload | null>(null);
     const [message, setMessage] = useState("");
 
+    useEffect(() => {
+        const persisted = loadLocalState<BuilderPersistedState>(BUILDER_STORAGE_KEY);
+        if (!persisted) return;
+
+        methods.reset(persisted.formValues);
+        setPrompt(persisted.prompt ?? "");
+        setJsonOut(persisted.jsonOut ?? null);
+        setMessage(persisted.message ?? "");
+
+        if (persisted.prompt?.trim()) {
+            onPromptReady(persisted.prompt);
+        }
+    }, [methods, onPromptReady]);
+
+    useEffect(() => {
+        const subscription = methods.watch(() => {
+            const toStore: BuilderPersistedState = {
+                formValues: methods.getValues(),
+                prompt,
+                jsonOut,
+                message
+            };
+            localStorage.setItem(BUILDER_STORAGE_KEY, JSON.stringify(toStore));
+        });
+
+        return () => subscription.unsubscribe();
+    }, [methods, prompt, jsonOut, message]);
+
+    useEffect(() => {
+        const toStore: BuilderPersistedState = {
+            formValues: methods.getValues(),
+            prompt,
+            jsonOut,
+            message
+        };
+        localStorage.setItem(BUILDER_STORAGE_KEY, JSON.stringify(toStore));
+    }, [methods, prompt, jsonOut, message]);
+
     const onGenerate = methods.handleSubmit((values) => {
         const result = generatePromptAndJson(values);
         setPrompt(result.prompt);
         setJsonOut(result.finalJson);
+        onPromptReady(result.prompt);
         setMessage("Prompt y JSON generados correctamente.");
     });
 
@@ -42,6 +137,7 @@ function BuilderModule() {
         setPrompt("");
         setJsonOut(null);
         setMessage("Formulario restaurado al template.");
+        localStorage.removeItem(BUILDER_STORAGE_KEY);
     };
 
     return (
@@ -170,7 +266,10 @@ function BuilderModule() {
 
                             <div className="grid gap-4 md:grid-cols-2">
                                 <label className="field-label">
-                                    testSuite.planId
+                                    <span className="flex items-center gap-2">
+                                        <span>testSuite.planId</span>
+                                        <span className="text-xs font-semibold text-red-400">*Obligatorio</span>
+                                    </span>
                                     <input
                                         type="number"
                                         className="field-input"
@@ -178,7 +277,10 @@ function BuilderModule() {
                                     />
                                 </label>
                                 <label className="field-label">
-                                    testSuite.planName
+                                    <span className="flex items-center gap-2">
+                                        <span>testSuite.planName</span>
+                                        <span className="text-xs font-semibold text-green-400">*Opcional</span>
+                                    </span>
                                     <input className="field-input" {...methods.register("testSuite.planName")} />
                                 </label>
                             </div>
@@ -205,6 +307,14 @@ function BuilderModule() {
                             >
                                 Descargar JSON
                             </button>
+                            <button
+                                type="button"
+                                className="btn-secondary"
+                                onClick={onOpenAiModule}
+                                disabled={!prompt}
+                            >
+                                Enviar prompt a IA
+                            </button>
                         </div>
                         {message && <p className="rounded-xl bg-white/80 px-5 py-2 text-2m text-green-500">{message}</p>}
                     </form>
@@ -225,59 +335,173 @@ function BuilderModule() {
     );
 }
 
-function JsonPreviewModule() {
+interface JsonPreviewModuleProps {
+    initialPrompt: string;
+    onGoBack: () => void;
+}
+
+function JsonPreviewModule({ initialPrompt, onGoBack }: JsonPreviewModuleProps) {
+    const [promptInput, setPromptInput] = useState(initialPrompt);
     const [rawJson, setRawJson] = useState("");
     const [parsed, setParsed] = useState<HuPayload | null>(null);
+    const [rawResponse, setRawResponse] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
+    const [isCreating, setIsCreating] = useState(false);
+    const [status, setStatus] = useState("");
     const [error, setError] = useState("");
+    const [createResult, setCreateResult] = useState<CreateResult | null>(null);
 
-    const parseInput = () => {
+    useEffect(() => {
+        const persisted = loadLocalState<PreviewPersistedState>(PREVIEW_STORAGE_KEY);
+        if (!persisted) return;
+
+        setPromptInput(persisted.promptInput ?? "");
+        setRawJson(persisted.rawJson ?? "");
+        setParsed(persisted.parsed ?? null);
+        setRawResponse(persisted.rawResponse ?? "");
+        setStatus(persisted.status ?? "");
+        setError(persisted.error ?? "");
+        setCreateResult(persisted.createResult ?? null);
+    }, []);
+
+    useEffect(() => {
+        if (!promptInput.trim() && initialPrompt.trim()) {
+            setPromptInput(initialPrompt);
+        }
+    }, [initialPrompt, promptInput]);
+
+    useEffect(() => {
+        const toStore: PreviewPersistedState = {
+            promptInput,
+            rawJson,
+            parsed,
+            rawResponse,
+            status,
+            error,
+            createResult
+        };
+        localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(toStore));
+    }, [promptInput, rawJson, parsed, rawResponse, status, error, createResult]);
+
+    const resetAll = () => {
+        setRawJson("");
+        setParsed(null);
+        setError("");
+        setStatus("");
+        setRawResponse("");
+        setCreateResult(null);
+        localStorage.removeItem(PREVIEW_STORAGE_KEY);
+    };
+
+    const callBackendGenerate = async () => {
+        if (!promptInput.trim()) {
+            setError("Pega el prompt antes de invocar la IA.");
+            return;
+        }
+
+        setIsLoading(true);
+        setError("");
+        setCreateResult(null);
+        setStatus("Consultando OpenAI via backend...");
+
         try {
-            const value = JSON.parse(rawJson) as HuPayload;
-            if (!value.hu || !value.testCases) {
-                throw new Error("El JSON debe tener 'hu' y 'testCases'.");
+            const response = await fetch("/api/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ prompt: promptInput })
+            });
+
+            const data = (await response.json()) as { json?: string; raw?: string; error?: string; warning?: string };
+
+            if (!response.ok) {
+                throw new Error(data.error ?? `Error ${response.status}`);
             }
+
+            setRawResponse(data.raw ?? "");
+            const jsonStr = data.json ?? "";
+            setRawJson(jsonStr);
+
+            const value = parseHuPayload(jsonStr);
             setParsed(value);
-            setError("");
+            setStatus(data.warning ? `JSON generado (con advertencia: ${data.warning})` : "JSON generado por IA y previsualizado.");
         } catch (err) {
             setParsed(null);
+            setStatus("");
             setError((err as Error).message);
+        } finally {
+            setIsLoading(false);
         }
+    };
+
+    const createInAzureDevOps = async () => {
+        if (!parsed) return;
+
+        setIsCreating(true);
+        setError("");
+        setCreateResult(null);
+        setStatus("Creando HU en Azure DevOps...");
+
+        try {
+            const response = await fetch("/api/create", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: rawJson
+            });
+
+            const data = (await response.json()) as CreateResult & { error?: string };
+
+            if (!response.ok) {
+                throw new Error(data.error ?? `Error ${response.status}`);
+            }
+
+            setCreateResult(data);
+            setStatus(data.message);
+        } catch (err) {
+            setStatus("");
+            setError((err as Error).message);
+        } finally {
+            setIsCreating(false);
+        }
+    };
+
+    const copyJsonOutput = async () => {
+        if (!rawJson.trim()) return;
+        await copyToClipboard(rawJson);
+        setStatus("JSON copiado al portapapeles.");
     };
 
     return (
         <div className="space-y-6">
-            <section className="panel space-y-4">
-                <h2 className="text-2xl font-display text-ink">Preview desde JSON</h2>
-                <p className="text-sm text-ink/75">
-                    Pega un JSON de HU para ver previsualización de HU y Test Cases.
-                </p>
+            {!parsed && !createResult && (
+                <section className="panel space-y-4">
+                    <h2 className="text-2xl font-display text-ink">Generar JSON con IA</h2>
+                    <p className="text-sm text-ink/75">
+                        El prompt se envía al backend que consulta OpenAI. El JSON resultante se previsualiza automáticamente.
+                    </p>
 
-                <textarea
-                    rows={10}
-                    className="field-input font-mono"
-                    placeholder='Pega aquí el JSON completo con "hu" y "testCases"'
-                    value={rawJson}
-                    onChange={(event) => setRawJson(event.target.value)}
-                />
-                <div className="flex gap-2">
-                    <button type="button" className="btn-primary" onClick={parseInput}>
-                        Previsualizar
-                    </button>
-                    <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={() => {
-                            setRawJson("");
-                            setParsed(null);
-                            setError("");
-                        }}
-                    >
-                        Limpiar
-                    </button>
-                </div>
+                    <details className="rounded-xl border border-ink/15 bg-white p-3">
+                        <summary className="cursor-pointer text-sm font-semibold text-ink">Ver / editar prompt</summary>
+                        <textarea
+                            rows={8}
+                            className="field-input font-mono mt-2"
+                            value={promptInput}
+                            onChange={(event) => setPromptInput(event.target.value)}
+                        />
+                    </details>
 
-                {error && <p className="rounded-xl bg-ember/15 px-3 py-2 text-sm text-ember">{error}</p>}
-            </section>
+                    <div className="flex flex-wrap gap-2">
+                        <button type="button" className="btn-primary" onClick={() => void callBackendGenerate()} disabled={isLoading || !promptInput.trim()}>
+                            {isLoading ? "Generando..." : "Generar JSON con IA"}
+                        </button>
+                        <button type="button" className="btn-secondary" onClick={onGoBack}>
+                            Volver a Armar Prompt
+                        </button>
+                    </div>
+
+                    {status && <p className="rounded-xl bg-white/80 px-3 py-2 text-sm text-green-600">{status}</p>}
+                    {error && <p className="rounded-xl bg-ember/15 px-3 py-2 text-sm text-ember">{error}</p>}
+                </section>
+            )}
 
             {parsed && (
                 <section className="panel space-y-4">
@@ -323,6 +547,94 @@ function JsonPreviewModule() {
                             </article>
                         ))}
                     </div>
+
+                    {!createResult && (
+                        <div className="flex flex-wrap gap-2 pt-2">
+                            <button
+                                type="button"
+                                className="btn-primary"
+                                onClick={() => void createInAzureDevOps()}
+                                disabled={isCreating}
+                            >
+                                {isCreating ? "Creando en Azure DevOps..." : "Crear en Azure DevOps"}
+                            </button>
+                            <button
+                                type="button"
+                                className="btn-secondary"
+                                onClick={() => { resetAll(); onGoBack(); }}
+                                disabled={isCreating}
+                            >
+                                Volver a empezar
+                            </button>
+                            <button type="button" className="btn-muted" onClick={() => void copyJsonOutput()} disabled={!rawJson.trim()}>
+                                Copiar JSON
+                            </button>
+                            <button
+                                type="button"
+                                className="btn-muted"
+                                onClick={() => parsed && downloadJson("hu.generated.json", parsed)}
+                            >
+                                Descargar JSON
+                            </button>
+                        </div>
+                    )}
+
+                    {rawResponse && (
+                        <details className="rounded-xl border border-ink/15 bg-white p-3">
+                            <summary className="cursor-pointer text-sm font-semibold text-ink">Respuesta cruda del modelo</summary>
+                            <pre className="output-box mt-2">{rawResponse}</pre>
+                        </details>
+                    )}
+
+                    {status && <p className="rounded-xl bg-white/80 px-3 py-2 text-sm text-green-600">{status}</p>}
+                    {error && <p className="rounded-xl bg-ember/15 px-3 py-2 text-sm text-ember">{error}</p>}
+                </section>
+            )}
+
+            {createResult && (
+                <section className="panel space-y-4">
+                    <h3 className="text-xl font-semibold text-green-700">Creado en Azure DevOps</h3>
+                    <div className="rounded-xl border border-green-200 bg-green-50 p-4 space-y-2">
+                        <p className="font-semibold">
+                            HU #{createResult.huId}
+                            <a
+                                href={createResult.huUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="ml-2 text-sm font-normal text-blue-600 underline"
+                            >
+                                Abrir en Azure DevOps
+                            </a>
+                        </p>
+                        {createResult.testCases.length > 0 && (
+                            <div>
+                                <p className="text-sm font-semibold">Test Cases:</p>
+                                <ul className="list-disc pl-5 text-sm space-y-1">
+                                    {createResult.testCases.map((tc) => (
+                                        <li key={tc.id}>
+                                            #{tc.id} — {tc.title}{" "}
+                                            <a
+                                                href={tc.url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-blue-600 underline"
+                                            >
+                                                ver
+                                            </a>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+                        {createResult.suiteId > 0 && (
+                            <p className="text-sm">Test Suite ID: {createResult.suiteId}</p>
+                        )}
+                    </div>
+                    <div className="flex flex-wrap gap-2 pt-2">
+                        <button type="button" className="btn-primary" onClick={() => { resetAll(); onGoBack(); }}>
+                            Crear otra HU
+                        </button>
+                    </div>
                 </section>
             )}
         </div>
@@ -331,6 +643,7 @@ function JsonPreviewModule() {
 
 export default function App() {
     const [module, setModule] = useState<ModuleKey>("builder");
+    const [promptForAi, setPromptForAi] = useState("");
 
     return (
         <div className="min-h-screen bg-theme text-ink">
@@ -355,23 +668,28 @@ export default function App() {
                             className={`sidebar-link ${module === "json-preview" ? "sidebar-link-active" : ""}`}
                             onClick={() => setModule("json-preview")}
                         >
-                            Preview JSON
+                            IA + Preview JSON
                         </button>
                     </nav>
 
                     <div className="mt-auto rounded-2xl border border-white/20 bg-white/10 p-3 text-sm text-white/85">
-                        Consejo: en Armar Prompt completa primero necesidad y cantidad de TCs para obtener resultados más rápidos.
+                        Modo de Uso: En Armar Prompt personaliza todos los campos para generar la HU según tu necesidad y después deja que la IA haga su magia.
                     </div>
                 </aside>
 
                 <main className="content-area">
-                    {module === "builder" ? (
-                        <BuilderModule />
-                    ) : (
+                    <div className={module === "builder" ? "block" : "hidden"}>
+                        <BuilderModule
+                            onPromptReady={setPromptForAi}
+                            onOpenAiModule={() => setModule("json-preview")}
+                        />
+                    </div>
+
+                    <div className={module === "json-preview" ? "block" : "hidden"}>
                         <div className="content-wrap">
-                            <JsonPreviewModule />
+                            <JsonPreviewModule initialPrompt={promptForAi} onGoBack={() => setModule("builder")} />
                         </div>
-                    )}
+                    </div>
                 </main>
             </div>
         </div>
