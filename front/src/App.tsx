@@ -844,7 +844,7 @@ export default function App() {
                         <div className="content-wrap">
                             <JsonPreviewModule
                                 initialPrompt={promptForAi}
-                                onGoBack={() => setModule("builder")}
+                                onGoBack={goToBuilderModule}
                                 onLog={addLog}
                             />
                         </div>
