@@ -1,20 +1,43 @@
-﻿# Automatizar HU  Azure DevOps
+﻿# Automatizar HU Azure DevOps
 
-Herramienta de línea de comandos en C# (.NET 9) que lee un archivo JSON con los parámetros de una Historia de Usuario y la crea automáticamente en Azure DevOps, junto con sus Test Cases vinculados (relación *Tested By*) y su Requirement Based Suite en el Test Plan indicado.
+Solución compuesta por:
 
-Este repositorio incluye además un **frontend (HU Workbench)** en React para ayudarte a:
+- Backend en C# (.NET 9) con API mínima en `Pruebas/`.
+- Frontend en React + Vite en `front/`.
 
-- generar el prompt + JSON final desde campos controlados,
-- pegar un JSON y ver una previsualización (HU + Test Cases).
+El flujo actual permite:
+
+1. Armar un prompt basado en plantilla y personalizaciones.
+2. Enviar ese prompt al backend para que consulte OpenAI (la API key vive en `.env` del backend).
+3. Recibir JSON, previsualizar HU + Test Cases automáticamente.
+4. Decidir si crear o no la HU en Azure DevOps.
+5. Ver un panel de logs de éxito/error para diagnóstico.
 
 ---
 
-## ¿Cómo funciona?
+## Arquitectura actual
 
-1. Configuras el archivo `.env` con tus credenciales (una sola vez).
-2. Completas el archivo `hu.json` con los datos de la HU.
-3. Ejecutas el programa.
-4. El programa llama a la API de Azure DevOps y crea la HU + los TCs + el Requirement Suite, vinculándolos automáticamente.
+### Backend (`Pruebas/`)
+
+Expone endpoints HTTP:
+
+- `POST /api/generate`
+: Recibe `prompt`, llama a OpenAI y devuelve el JSON generado.
+- `POST /api/create`
+: Recibe el JSON HU final y crea HU + Test Cases + vínculos + suite en Azure DevOps.
+
+### Frontend (`front/`)
+
+Módulos principales:
+
+- `Armar Prompt`.
+- `IA + Preview JSON`.
+
+Características implementadas:
+
+- Persistencia de configuración y previsualización con `localStorage`.
+- Navegación entre módulos sin perder estado.
+- Panel de logs en UI para eventos de éxito, error e información.
 
 ---
 
@@ -33,6 +56,7 @@ Crea un archivo `.env` en la raíz del proyecto con tus credenciales:
 AZDO_ORG=nombre-de-tu-organizacion
 AZDO_PROJECT=nombre-del-proyecto
 AZDO_PAT=tu-personal-access-token
+OPENAI_API_KEY=sk-tu-api-key
 ```
 
 ### ¿Dónde encuentro cada valor?
@@ -47,7 +71,135 @@ AZDO_PAT=tu-personal-access-token
 
 ---
 
-## Uso
+## Ejecución local
+
+### 1) Backend
+
+```bash
+cd Pruebas
+dotnet run
+```
+
+El backend queda en `http://localhost:5000`.
+
+### 2) Frontend
+
+```bash
+cd front
+npm install
+npm run dev
+```
+
+Vite usa proxy para `/api` hacia `http://localhost:5000`.
+
+## Uso por flujo
+
+1. En `Armar Prompt`, configura campos y genera el prompt.
+2. Entra a `IA + Preview JSON` y genera JSON con IA.
+3. La previsualización se carga automáticamente.
+4. Decide:
+   - Crear HU en Azure DevOps.
+   - Volver a empezar con otra necesidad.
+
+## API backend (detalle)
+
+### `POST /api/generate`
+
+Request:
+
+```json
+{
+  "prompt": "...",
+  "model": "gpt-4.1-mini"
+}
+```
+
+Response (éxito):
+
+```json
+{
+  "json": "{ ... }",
+  "raw": "respuesta cruda del modelo"
+}
+```
+
+### `POST /api/create`
+
+Request:
+
+- JSON HU final con `hu`, `testCases`, `testSuite`, etc.
+
+Response (éxito):
+
+```json
+{
+  "huId": 12345,
+  "huUrl": "https://dev.azure.com/...",
+  "testCases": [],
+  "suiteId": 999,
+  "message": "HU #12345 creada con N Test Cases."
+}
+```
+
+## Panel de logs (UI)
+
+La app incluye un panel de logs en la parte inferior del contenido principal.
+
+Registra eventos como:
+
+- Generación de prompt.
+- Generación de JSON con IA (inicio, éxito, error).
+- Creación en Azure DevOps (inicio, éxito, error).
+- Copias al portapapeles.
+- Limpieza/reset de estados.
+
+Funcionalidades:
+
+- `Copiar logs`: exporta eventos para soporte.
+- `Limpiar logs`: borra historial en pantalla y almacenamiento local.
+
+Cada evento muestra:
+
+- Nivel (`SUCCESS`, `ERROR`, `INFO`).
+- Fecha/hora.
+- Módulo y acción.
+- Mensaje y detalle opcional.
+
+## Persistencia local
+
+Se guarda en `localStorage`:
+
+- Última configuración de `Armar Prompt`.
+- Último estado de `IA + Preview JSON`.
+- Historial de logs.
+
+Esto evita pérdida de información al cambiar de módulo o refrescar el navegador.
+
+## Troubleshooting rápido
+
+### Error proxy de Vite (`ECONNREFUSED /api/...`)
+
+- Verifica backend activo en `http://localhost:5000`.
+- Arranca backend con `dotnet run` en `Pruebas/`.
+
+### `Unexpected end of JSON input`
+
+- El backend devolvió cuerpo vacío o error no JSON.
+- Revisa el panel de logs UI y la consola de backend.
+
+### Error OpenAI
+
+- Revisa `OPENAI_API_KEY` en `.env` de `Pruebas/`.
+- Confirma salida a internet desde el servidor.
+
+### Error Azure DevOps
+
+- Verifica `AZDO_ORG`, `AZDO_PROJECT`, `AZDO_PAT`.
+- Revisa permisos del PAT para Work Items y Test Management.
+
+## Uso CLI (opcional)
+
+Se conserva ejecución por CLI para procesos manuales/lote:
 
 ```bash
 # Usa hu.json por defecto

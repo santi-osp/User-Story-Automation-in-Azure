@@ -9,6 +9,19 @@ import { copyToClipboard, downloadJson } from "./utils/download";
 type ModuleKey = "builder" | "json-preview";
 const BUILDER_STORAGE_KEY = "hu.builder.state.v1";
 const PREVIEW_STORAGE_KEY = "hu.preview.state.v1";
+const LOG_STORAGE_KEY = "hu.app.logs.v1";
+
+type LogLevel = "success" | "error" | "info";
+
+interface AppLog {
+    id: string;
+    timestamp: string;
+    level: LogLevel;
+    module: "builder" | "preview" | "app";
+    action: string;
+    message: string;
+    detail?: string;
+}
 
 interface BuilderPersistedState {
     formValues: FormValues;
@@ -61,10 +74,11 @@ function parseHuPayload(value: string): HuPayload {
 
 interface BuilderModuleProps {
     onPromptReady: (prompt: string) => void;
-    onOpenAiModule: () => void;
+    onOpenAiModule: (prompt: string) => void;
+    onLog: (entry: Omit<AppLog, "id" | "timestamp">) => void;
 }
 
-function BuilderModule({ onPromptReady, onOpenAiModule }: BuilderModuleProps) {
+function BuilderModule({ onPromptReady, onOpenAiModule, onLog }: BuilderModuleProps) {
     const methods = useForm<FormValues>({
         mode: "onBlur",
         defaultValues: payloadToFormValues(TEMPLATE_PAYLOAD)
@@ -118,18 +132,37 @@ function BuilderModule({ onPromptReady, onOpenAiModule }: BuilderModuleProps) {
         setJsonOut(result.finalJson);
         onPromptReady(result.prompt);
         setMessage("Prompt y JSON generados correctamente.");
+        onLog({
+            level: "success",
+            module: "builder",
+            action: "generate-prompt",
+            message: "Prompt y JSON generados correctamente.",
+            detail: `TCs: ${result.finalJson.testCases.length}`
+        });
     });
 
     const copyPrompt = async () => {
         if (!prompt) return;
         await copyToClipboard(prompt);
         setMessage("Prompt copiado.");
+        onLog({
+            level: "info",
+            module: "builder",
+            action: "copy-prompt",
+            message: "Prompt copiado al portapapeles."
+        });
     };
 
     const copyJson = async () => {
         if (!jsonOut) return;
         await copyToClipboard(JSON.stringify(jsonOut, null, 2));
         setMessage("JSON copiado.");
+        onLog({
+            level: "info",
+            module: "builder",
+            action: "copy-json",
+            message: "JSON copiado al portapapeles."
+        });
     };
 
     const resetTemplate = () => {
@@ -138,6 +171,12 @@ function BuilderModule({ onPromptReady, onOpenAiModule }: BuilderModuleProps) {
         setJsonOut(null);
         setMessage("Formulario restaurado al template.");
         localStorage.removeItem(BUILDER_STORAGE_KEY);
+        onLog({
+            level: "info",
+            module: "builder",
+            action: "reset-template",
+            message: "Formulario restaurado al template."
+        });
     };
 
     return (
@@ -310,7 +349,7 @@ function BuilderModule({ onPromptReady, onOpenAiModule }: BuilderModuleProps) {
                             <button
                                 type="button"
                                 className="btn-secondary"
-                                onClick={onOpenAiModule}
+                                onClick={() => onOpenAiModule(prompt)}
                                 disabled={!prompt}
                             >
                                 Enviar prompt a IA
@@ -338,9 +377,10 @@ function BuilderModule({ onPromptReady, onOpenAiModule }: BuilderModuleProps) {
 interface JsonPreviewModuleProps {
     initialPrompt: string;
     onGoBack: () => void;
+    onLog: (entry: Omit<AppLog, "id" | "timestamp">) => void;
 }
 
-function JsonPreviewModule({ initialPrompt, onGoBack }: JsonPreviewModuleProps) {
+function JsonPreviewModule({ initialPrompt, onGoBack, onLog }: JsonPreviewModuleProps) {
     const [promptInput, setPromptInput] = useState(initialPrompt);
     const [rawJson, setRawJson] = useState("");
     const [parsed, setParsed] = useState<HuPayload | null>(null);
@@ -365,7 +405,7 @@ function JsonPreviewModule({ initialPrompt, onGoBack }: JsonPreviewModuleProps) 
     }, []);
 
     useEffect(() => {
-        if (!promptInput.trim() && initialPrompt.trim()) {
+        if (initialPrompt.trim() && initialPrompt !== promptInput) {
             setPromptInput(initialPrompt);
         }
     }, [initialPrompt, promptInput]);
@@ -391,11 +431,23 @@ function JsonPreviewModule({ initialPrompt, onGoBack }: JsonPreviewModuleProps) 
         setRawResponse("");
         setCreateResult(null);
         localStorage.removeItem(PREVIEW_STORAGE_KEY);
+        onLog({
+            level: "info",
+            module: "preview",
+            action: "reset-preview",
+            message: "Estado de preview limpiado."
+        });
     };
 
     const callBackendGenerate = async () => {
         if (!promptInput.trim()) {
             setError("Pega el prompt antes de invocar la IA.");
+            onLog({
+                level: "error",
+                module: "preview",
+                action: "generate-json",
+                message: "No se pudo generar JSON: prompt vacío."
+            });
             return;
         }
 
@@ -403,6 +455,12 @@ function JsonPreviewModule({ initialPrompt, onGoBack }: JsonPreviewModuleProps) 
         setError("");
         setCreateResult(null);
         setStatus("Consultando OpenAI via backend...");
+        onLog({
+            level: "info",
+            module: "preview",
+            action: "generate-json-start",
+            message: "Solicitud enviada al backend para generar JSON con IA."
+        });
 
         try {
             const response = await fetch("/api/generate", {
@@ -424,10 +482,27 @@ function JsonPreviewModule({ initialPrompt, onGoBack }: JsonPreviewModuleProps) 
             const value = parseHuPayload(jsonStr);
             setParsed(value);
             setStatus(data.warning ? `JSON generado (con advertencia: ${data.warning})` : "JSON generado por IA y previsualizado.");
+            onLog({
+                level: data.warning ? "info" : "success",
+                module: "preview",
+                action: "generate-json-success",
+                message: data.warning
+                    ? "JSON generado con advertencia."
+                    : "JSON generado y previsualizado correctamente.",
+                detail: data.warning ? data.warning : `TCs: ${value.testCases.length}`
+            });
         } catch (err) {
             setParsed(null);
             setStatus("");
-            setError((err as Error).message);
+            const errorMessage = (err as Error).message;
+            setError(errorMessage);
+            onLog({
+                level: "error",
+                module: "preview",
+                action: "generate-json-error",
+                message: "Error al generar JSON con IA.",
+                detail: errorMessage
+            });
         } finally {
             setIsLoading(false);
         }
@@ -440,6 +515,12 @@ function JsonPreviewModule({ initialPrompt, onGoBack }: JsonPreviewModuleProps) 
         setError("");
         setCreateResult(null);
         setStatus("Creando HU en Azure DevOps...");
+        onLog({
+            level: "info",
+            module: "preview",
+            action: "create-azdo-start",
+            message: "Solicitud enviada para crear HU en Azure DevOps."
+        });
 
         try {
             const response = await fetch("/api/create", {
@@ -456,9 +537,24 @@ function JsonPreviewModule({ initialPrompt, onGoBack }: JsonPreviewModuleProps) 
 
             setCreateResult(data);
             setStatus(data.message);
+            onLog({
+                level: "success",
+                module: "preview",
+                action: "create-azdo-success",
+                message: `HU creada en Azure DevOps (#${data.huId}).`,
+                detail: `TCs creados: ${data.testCases.length}`
+            });
         } catch (err) {
             setStatus("");
-            setError((err as Error).message);
+            const errorMessage = (err as Error).message;
+            setError(errorMessage);
+            onLog({
+                level: "error",
+                module: "preview",
+                action: "create-azdo-error",
+                message: "Error al crear HU en Azure DevOps.",
+                detail: errorMessage
+            });
         } finally {
             setIsCreating(false);
         }
@@ -468,6 +564,12 @@ function JsonPreviewModule({ initialPrompt, onGoBack }: JsonPreviewModuleProps) 
         if (!rawJson.trim()) return;
         await copyToClipboard(rawJson);
         setStatus("JSON copiado al portapapeles.");
+        onLog({
+            level: "info",
+            module: "preview",
+            action: "copy-json",
+            message: "JSON de salida copiado al portapapeles."
+        });
     };
 
     return (
@@ -644,6 +746,58 @@ function JsonPreviewModule({ initialPrompt, onGoBack }: JsonPreviewModuleProps) 
 export default function App() {
     const [module, setModule] = useState<ModuleKey>("builder");
     const [promptForAi, setPromptForAi] = useState("");
+    const [logs, setLogs] = useState<AppLog[]>(() => loadLocalState<AppLog[]>(LOG_STORAGE_KEY) ?? []);
+
+    const goToBuilderModule = () => {
+        setModule("builder");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+
+    const addLog = (entry: Omit<AppLog, "id" | "timestamp">) => {
+        const next: AppLog = {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            timestamp: new Date().toISOString(),
+            ...entry
+        };
+        setLogs((prev) => [next, ...prev].slice(0, 200));
+    };
+
+    useEffect(() => {
+        localStorage.setItem(LOG_STORAGE_KEY, JSON.stringify(logs));
+    }, [logs]);
+
+    const clearLogs = () => {
+        setLogs([]);
+        localStorage.removeItem(LOG_STORAGE_KEY);
+    };
+
+    const copyLogs = async () => {
+        const text = logs
+            .map((item) => {
+                const parts = [`[${item.timestamp}]`, item.level.toUpperCase(), `${item.module}:${item.action}`, item.message];
+                if (item.detail) parts.push(`detail=${item.detail}`);
+                return parts.join(" | ");
+            })
+            .join("\n");
+        await copyToClipboard(text || "Sin logs registrados.");
+        addLog({
+            level: "info",
+            module: "app",
+            action: "copy-logs",
+            message: "Panel de logs copiado al portapapeles."
+        });
+    };
+
+    const openAiModuleWithPrompt = (prompt: string) => {
+        setPromptForAi(prompt);
+        setModule("json-preview");
+        addLog({
+            level: "info",
+            module: "app",
+            action: "open-preview",
+            message: "Prompt enviado al modulo IA para generar JSON."
+        });
+    };
 
     return (
         <div className="min-h-screen bg-theme text-ink">
@@ -659,7 +813,7 @@ export default function App() {
                         <button
                             type="button"
                             className={`sidebar-link ${module === "builder" ? "sidebar-link-active" : ""}`}
-                            onClick={() => setModule("builder")}
+                            onClick={goToBuilderModule}
                         >
                             Armar Prompt
                         </button>
@@ -681,15 +835,58 @@ export default function App() {
                     <div className={module === "builder" ? "block" : "hidden"}>
                         <BuilderModule
                             onPromptReady={setPromptForAi}
-                            onOpenAiModule={() => setModule("json-preview")}
+                            onOpenAiModule={openAiModuleWithPrompt}
+                            onLog={addLog}
                         />
                     </div>
 
                     <div className={module === "json-preview" ? "block" : "hidden"}>
                         <div className="content-wrap">
-                            <JsonPreviewModule initialPrompt={promptForAi} onGoBack={() => setModule("builder")} />
+                            <JsonPreviewModule
+                                initialPrompt={promptForAi}
+                                onGoBack={() => setModule("builder")}
+                                onLog={addLog}
+                            />
                         </div>
                     </div>
+
+                    <section className="content-wrap mt-6">
+                        <div className="panel space-y-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <h3 className="text-lg font-semibold text-ink">Panel de logs</h3>
+                                <div className="flex flex-wrap gap-2">
+                                    <button type="button" className="btn-muted" onClick={() => void copyLogs()}>
+                                        Copiar logs
+                                    </button>
+                                    <button type="button" className="btn-secondary" onClick={clearLogs}>
+                                        Limpiar logs
+                                    </button>
+                                </div>
+                            </div>
+
+                            <p className="text-xs text-ink/70">
+                                Registra eventos de exito, error e informacion para facilitar diagnostico en despliegues.
+                            </p>
+
+                            <div className="max-h-72 space-y-2 overflow-auto rounded-xl border border-ink/15 bg-white p-3">
+                                {logs.length === 0 ? (
+                                    <p className="text-sm text-ink/60">Sin eventos por ahora.</p>
+                                ) : (
+                                    logs.map((item) => (
+                                        <article key={item.id} className="rounded-lg border border-ink/10 bg-slate-50 p-2 text-xs">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span className="font-semibold text-ink">{item.level.toUpperCase()}</span>
+                                                <span className="text-ink/60">{new Date(item.timestamp).toLocaleString()}</span>
+                                                <span className="rounded bg-ink/10 px-2 py-0.5 text-ink">{item.module}:{item.action}</span>
+                                            </div>
+                                            <p className="mt-1 text-sm text-ink">{item.message}</p>
+                                            {item.detail && <p className="mt-1 text-ink/70">{item.detail}</p>}
+                                        </article>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </section>
                 </main>
             </div>
         </div>
