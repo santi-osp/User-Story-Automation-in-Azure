@@ -1,3 +1,4 @@
+import { V } from "vitest/dist/chunks/reporters.nr4dxCkA.js";
 import type { FormValues, HuPayload, TcFields } from "../types";
 
 export const EXACT_PROMPT_TEMPLATE = String.raw`{
@@ -60,6 +61,14 @@ NO cambies los siguientes campos ni sus valores:
 * testSuite
 * planId
 * planName
+* hu.startDate
+* hu.finishDate
+* hu.risk
+* hu.frenteDeTrabajo
+* hu.assignedTo
+* hu.priority
+* hu.valueArea
+* hu.tipoHU
 
 ---
 
@@ -70,14 +79,6 @@ Solo puedes modificar los siguientes campos:
 * hu.title
 * hu.description
 * hu.acceptanceCriteria
-* hu.priority
-* hu.risk
-* hu.startDate
-* hu.finishDate
-* hu.valueArea
-* hu.tipoHU
-* hu.frenteDeTrabajo
-* hu.assignedTo
 * testCases
 
 ---
@@ -123,7 +124,7 @@ Descripción clara del criterio.</li>
 
 ## 6. Test Cases
 
-Debes generar los test cases que consideres necesarios, maximo 5, usando esta estructura:
+Debes generar la cantidad de testcases que hayan en la plantilla del JSON, usando esta estructura:
 
 {
 "title": "TC-001 — descripción corta",
@@ -169,7 +170,7 @@ export function payloadToFormValues(payload: HuPayload): FormValues {
   return {
     need: "",
     tcCount: payload.testCases.length,
-    tcState: "Ready",
+    tcState: "Ready", // Default state for all test cases
     iterationPath: payload.iterationPath,
     areaPath: payload.areaPath,
     hu: { ...payload.hu },
